@@ -164,7 +164,7 @@ if uploaded_file is not None:
     
     # ===== KEY METRICS =====
     st.markdown("---")
-    st.subheader("Key Performance Metrics")
+    st.subheader(" Key Performance Metrics")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -302,13 +302,13 @@ if uploaded_file is not None:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("Top Scoring Regions (Post-Session)")
+            st.subheader(" Top Scoring Regions (Post-Session)")
             top_scoring = region_stats.nlargest(5, 'Post_Score_Pct')[['Region', 'Post_Score_Pct']]
             top_scoring['Post_Score_Pct'] = top_scoring['Post_Score_Pct'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(top_scoring, hide_index=True, use_container_width=True)
         
         with col2:
-            st.subheader("Most Improved Regions (Adaptation)")
+            st.subheader(" Most Improved Regions (Adaptation)")
             most_improved = region_stats.nlargest(5, 'Improvement')[['Region', 'Improvement']]
             most_improved['Improvement'] = most_improved['Improvement'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(most_improved, hide_index=True, use_container_width=True)
@@ -374,14 +374,14 @@ if uploaded_file is not None:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("Top Performing Instructors")
+            st.subheader(" Top Performing Instructors")
             top_perf = instructor_stats.nlargest(10, 'Post_Score_Pct')[['Instructor Name', 'Post_Score_Pct', 'Student Id']]
             top_perf.columns = ['Instructor', 'Post Score %', 'Students']
             top_perf['Post Score %'] = top_perf['Post Score %'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(top_perf, hide_index=True, use_container_width=True)
         
         with col2:
-            st.subheader("Best Adaptation (Improvement)")
+            st.subheader(" Best Adaptation (Improvement)")
             best_adapt = instructor_stats.nlargest(10, 'Improvement')[['Instructor Name', 'Improvement', 'Student Id']]
             best_adapt.columns = ['Instructor', 'Improvement %', 'Students']
             best_adapt['Improvement %'] = best_adapt['Improvement %'].apply(lambda x: f"{x:.1f}%")
@@ -389,7 +389,7 @@ if uploaded_file is not None:
         
         # All Instructors Assessment Count
         st.markdown("---")
-        st.subheader("Complete Instructor List - Assessment Count")
+        st.subheader(" Complete Instructor List - Assessment Count")
         
         # Calculate number of assessments (Content Id) per instructor
         all_instructors = filtered_df.groupby('Instructor Name').agg({
@@ -439,7 +439,7 @@ if uploaded_file is not None:
         
         # Instructors per Region
         st.markdown("---")
-        st.subheader("Number of Instructors per Region")
+        st.subheader(" Number of Instructors per Region")
         
         instructors_per_region = filtered_df.groupby('Region')['Instructor Name'].nunique().reset_index()
         instructors_per_region.columns = ['Region', 'Number of Instructors']
@@ -608,7 +608,7 @@ if uploaded_file is not None:
         st.markdown("### Number of Unique Students Taking Assessments")
         
         # Students per Grade
-        st.subheader("Students per Grade/Parent Class")
+        st.subheader(" Students per Grade/Parent Class")
         students_per_grade = filtered_df.groupby('Parent_Class')['Student Id'].nunique().reset_index()
         students_per_grade.columns = ['Grade', 'Number of Students']
         students_per_grade = students_per_grade.sort_values('Grade')
@@ -646,7 +646,7 @@ if uploaded_file is not None:
         
         # Students per Region
         st.markdown("---")
-        st.subheader("Students per Region")
+        st.subheader(" Students per Region")
         students_per_region = filtered_df.groupby('Region')['Student Id'].nunique().reset_index()
         students_per_region.columns = ['Region', 'Number of Students']
         students_per_region = students_per_region.sort_values('Number of Students', ascending=False)
@@ -684,7 +684,7 @@ if uploaded_file is not None:
         
         # Students per Program Type
         st.markdown("---")
-        st.subheader("Students per Program Type")
+        st.subheader(" Students per Program Type")
         students_per_program = filtered_df.groupby('Program Type')['Student Id'].nunique().reset_index()
         students_per_program.columns = ['Program Type', 'Number of Students']
         students_per_program = students_per_program.sort_values('Number of Students', ascending=False)
@@ -722,7 +722,7 @@ if uploaded_file is not None:
         
         # Combined breakdown: Region x Program Type
         st.markdown("---")
-        st.subheader("Students by Region and Program Type")
+        st.subheader(" Students by Region and Program Type")
         
         students_region_program = filtered_df.groupby(['Region', 'Program Type'])['Student Id'].nunique().reset_index()
         students_region_program.columns = ['Region', 'Program Type', 'Number of Students']
@@ -758,7 +758,7 @@ if uploaded_file is not None:
         
         # Combined breakdown: Grade x Region
         st.markdown("---")
-        st.subheader("Students by Grade and Region")
+        st.subheader(" Students by Grade and Region")
         
         students_grade_region = filtered_df.groupby(['Parent_Class', 'Region'])['Student Id'].nunique().reset_index()
         students_grade_region.columns = ['Grade', 'Region', 'Number of Students']
