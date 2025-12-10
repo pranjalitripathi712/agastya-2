@@ -209,6 +209,33 @@ if uploaded_file is not None:
 
     with col6:
         st.metric("Min Tests/Student", f"{min_tests}")
+        
+    # ===== NEW SECTION: Region Participation Summary Table (To be added under Key Metrics) =====
+    st.markdown("---")
+    st.subheader("📍 Region Participation Summary")
+    
+    # Calculate participation metrics per region
+    region_participation_summary = filtered_df.groupby('Region').agg(
+        Unique_Students=('Student Id', 'nunique'),
+        Total_Pre_Assessments=('Pre_Score', 'count'), # Count of non-null Pre_Score is a proxy for Pre-Assessments
+        Total_Post_Assessments=('Post_Score', 'count') # Count of non-null Post_Score is a proxy for Post-Assessments
+    ).reset_index()
+    
+    region_participation_summary.columns = [
+        'Region', 
+        'Unique Students', 
+        'Total Pre-Assessments', 
+        'Total Post-Assessments'
+    ]
+
+    # Sort by Unique Students descending for better visibility
+    region_participation_summary = region_participation_summary.sort_values(
+        'Unique Students', 
+        ascending=False
+    ).reset_index(drop=True)
+    
+    st.dataframe(region_participation_summary, hide_index=True, use_container_width=True)
+    # ===== END NEW SECTION =====
     
     # ===== TABS FOR DIFFERENT ANALYSES =====
     st.markdown("---")
@@ -1038,6 +1065,44 @@ if uploaded_file is not None:
     
     col1, col2, col3, col4, col5 = st.columns(5)
     
+    # NOTE: The region_stats dataframe is created inside tab1, so it might not be defined if tab1 is never accessed.
+    # We will ensure all needed dataframes are available for download here.
+    
+    # Re-calculate necessary stats if needed outside of the tab blocks for download section
+    if 'region_stats' not in locals():
+        region_stats_dl = filtered_df.groupby('Region').agg({
+            'Pre_Score': 'mean',
+            'Post_Score': 'mean',
+            'Student Id': 'count'
+        }).reset_index()
+        region_stats_dl['Pre_Score_Pct'] = (region_stats_dl['Pre_Score'] / 5) * 100
+        region_stats_dl['Post_Score_Pct'] = (region_stats_dl['Post_Score'] / 5) * 100
+        region_stats_dl['Improvement'] = region_stats_dl['Post_Score_Pct'] - region_stats_dl['Pre_Score_Pct']
+        region_stats = region_stats_dl # Use this for download
+        
+    if 'instructor_stats' not in locals():
+        instructor_stats_dl = filtered_df.groupby('Instructor Name').agg({
+            'Pre_Score': 'mean',
+            'Post_Score': 'mean',
+            'Student Id': 'count'
+        }).reset_index()
+        instructor_stats_dl['Pre_Score_Pct'] = (instructor_stats_dl['Pre_Score'] / 5) * 100
+        instructor_stats_dl['Post_Score_Pct'] = (instructor_stats_dl['Post_Score'] / 5) * 100
+        instructor_stats_dl['Improvement'] = instructor_stats_dl['Post_Score_Pct'] - instructor_stats_dl['Pre_Score_Pct']
+        instructor_stats = instructor_stats_dl # Use this for download
+
+    if 'grade_stats' not in locals():
+        grade_stats_dl = filtered_df.groupby('Parent_Class').agg({
+            'Pre_Score': 'mean',
+            'Post_Score': 'mean',
+            'Student Id': 'count'
+        }).reset_index()
+        grade_stats_dl['Pre_Score_Pct'] = (grade_stats_dl['Pre_Score'] / 5) * 100
+        grade_stats_dl['Post_Score_Pct'] = (grade_stats_dl['Post_Score'] / 5) * 100
+        grade_stats_dl['Improvement'] = grade_stats_dl['Post_Score_Pct'] - grade_stats_dl['Pre_Score_Pct']
+        grade_stats = grade_stats_dl # Use this for download
+        
+        
     with col1:
         region_csv = region_stats.to_csv(index=False)
         st.download_button("Download Region Analysis", region_csv, "region_analysis.csv", "text/csv")
