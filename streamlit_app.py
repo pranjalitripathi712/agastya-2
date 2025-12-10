@@ -103,9 +103,14 @@ if uploaded_file is not None:
         try:
             raw_df = pd.read_excel(uploaded_file)
             
-            # Basic check for Date_Post before proceeding
+            # Basic checks for required columns
             if 'Date_Post' not in raw_df.columns:
                 st.error("❌ Column 'Date_Post' not found in uploaded file. Please add this column and try again.")
+                st.stop()
+            
+            # NEW CHECK FOR DONOR COLUMN
+            if 'Donor' not in raw_df.columns:
+                st.error("❌ Column 'Donor' not found in uploaded file. This column is required for Donor Analysis. Please add this column and try again.")
                 st.stop()
                 
             df, initial_count, cleaned_count = clean_and_process_data(raw_df)
@@ -207,7 +212,7 @@ if uploaded_file is not None:
     
     # ===== TABS FOR DIFFERENT ANALYSES =====
     st.markdown("---")
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📍 Region Analysis", "👤 Instructor Analysis", "📚 Grade Analysis", "📊 Program Type Analysis", "👥 Student Participation", "🏫 School Analysis"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📍 Region Analysis", "👤 Instructor Analysis", "📚 Grade Analysis", "📊 Program Type Analysis", "👥 Student Participation", "🏫 School Analysis", "💰 Donor Analysis"])
     
     # ===== TAB 1: REGION ANALYSIS =====
     with tab1:
@@ -952,12 +957,86 @@ if uploaded_file is not None:
             st.error(f"Missing required columns for School Analysis: {e}")
             st.warning("Please ensure your Excel file contains 'School Name' and 'UDISE' columns.")
 
+    # ===== TAB 7: DONOR ANALYSIS =====
+    with tab7:
+        st.header("Donor Performance Analysis")
+        
+        # 1. Calculate Donor Statistics
+        # UDISE is used as a unique identifier for schools
+        donor_stats = filtered_df.groupby('Donor').agg(
+            Num_Schools=('UDISE', 'nunique'),
+            Num_Students=('Student Id', 'nunique'),
+            Num_Assessments=('Student Id', 'count'), # Total rows = total assessments
+            Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
+            Avg_Post_Score_Raw=('Post_Score', 'mean')
+        ).reset_index()
+        
+        # 2. Calculate percentages
+        donor_stats['Avg Pre Score %'] = (donor_stats['Avg_Pre_Score_Raw'] / 5) * 100
+        donor_stats['Avg Post Score %'] = (donor_stats['Avg_Post_Score_Raw'] / 5) * 100
+        donor_stats['Improvement %'] = donor_stats['Avg Post Score %'] - donor_stats['Avg Pre Score %']
+        
+        # 3. Format columns for display
+        display_donor_stats = donor_stats.copy()
+        display_donor_stats = display_donor_stats.sort_values('Num_Assessments', ascending=False)
+        
+        # Select and rename final columns
+        display_donor_stats = display_donor_stats[[
+            'Donor', 
+            'Num_Schools', 
+            'Num_Students', 
+            'Num_Assessments', 
+            'Avg Pre Score %', 
+            'Avg Post Score %', 
+            'Improvement %'
+        ]]
+        
+        display_donor_stats.columns = [
+            'Donor', 
+            'Schools', 
+            'Students', 
+            'Assessments', 
+            'Avg Pre %', 
+            'Avg Post %', 
+            'Improvement %'
+        ]
+        
+        # Apply string formatting
+        display_donor_stats['Avg Pre %'] = display_donor_stats['Avg Pre %'].apply(lambda x: f"{x:.1f}%")
+        display_donor_stats['Avg Post %'] = display_donor_stats['Avg Post %'].apply(lambda x: f"{x:.1f}%")
+        display_donor_stats['Improvement %'] = display_donor_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
+        
+        st.subheader("Key Donor Metrics")
+        
+        # Key Metrics (Top level summary)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Unique Donors", len(display_donor_stats))
+        with col2:
+            st.metric("Avg Schools per Donor", f"{display_donor_stats['Schools'].mean():.1f}")
+        with col3:
+            st.metric("Total Assessments", display_donor_stats['Assessments'].sum())
+            
+        st.markdown("---")
+
+        st.subheader("Detailed Donor Analysis Table")
+        
+        st.dataframe(display_donor_stats, hide_index=True, use_container_width=True)
+        
+        # Download button
+        donor_csv = display_donor_stats.to_csv(index=False)
+        st.download_button(
+            "📥 Download Donor Analysis Data (CSV)",
+            donor_csv,
+            "donor_analysis.csv",
+            "text/csv"
+        )
     
     # ===== DOWNLOAD SECTION =====
     st.markdown("---")
     st.subheader("📥 Download Analysis Reports")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         region_csv = region_stats.to_csv(index=False)
@@ -977,6 +1056,12 @@ if uploaded_file is not None:
             school_csv = school_stats.to_csv(index=False)
             st.download_button("Download School Analysis", school_csv, "school_analysis_summary.csv", "text/csv")
 
+    with col5:
+        # Check if donor_stats exists (it's created inside the tab)
+        if 'display_donor_stats' in locals():
+            st.download_button("Download Donor Analysis", donor_csv, "donor_analysis_summary.csv", "text/csv")
+
+
 else:
     st.info("👆 Please upload your student data Excel file to begin")
     
@@ -988,6 +1073,7 @@ else:
     **Identification Columns:**
     - `Region` - Geographic region
     - `School Name` - Name of the school
+    - **`Donor` - The donor/partner associated with the record (NEW)**
     - `UDISE` - School unique ID
     - `Student Id` - Unique student identifier
     - `Class` - Class with section (e.g., 6-A, 7-B)
