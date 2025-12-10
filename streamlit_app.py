@@ -88,7 +88,7 @@ def clean_and_process_data(df):
     
     return df, initial_count, cleaned_count
 
-# ===== NEW FUNCTION: SUBJECT ANALYSIS TAB =====
+# ===== NEW FUNCTION: SUBJECT ANALYSIS TAB (MODIFIED SORTING) =====
 def tab8_subject_analysis(df):
     """
     Generates the Subject-wise Performance and Participation Analysis.
@@ -114,8 +114,8 @@ def tab8_subject_analysis(df):
     subject_stats['Avg Post Score %'] = (subject_stats['Avg_Post_Score_Raw'] / 5) * 100
     subject_stats['Improvement %'] = subject_stats['Avg Post Score %'] - subject_stats['Avg Pre Score %']
     
-    # Sort for consistent plotting
-    subject_stats = subject_stats.sort_values('Subject')
+    # MODIFIED: Sort in ascending order of Post Score %
+    subject_stats = subject_stats.sort_values('Avg Post Score %', ascending=True)
     
     # --- Visualization: Performance ---
     st.subheader("📈 Subject Performance Comparison (Pre vs. Post)")
@@ -341,7 +341,7 @@ if uploaded_file is not None:
     # Placeholder for subject_stats for download section
     subject_stats = None
 
-    # ===== TAB 1: REGION ANALYSIS (UNCHANGED) =====
+    # ===== TAB 1: REGION ANALYSIS (MODIFIED SORTING) =====
     with tab1:
         st.header("Region-wise Performance Analysis")
         
@@ -355,7 +355,9 @@ if uploaded_file is not None:
         region_stats['Pre_Score_Pct'] = (region_stats['Pre_Score'] / 5) * 100
         region_stats['Post_Score_Pct'] = (region_stats['Post_Score'] / 5) * 100
         region_stats['Improvement'] = region_stats['Post_Score_Pct'] - region_stats['Pre_Score_Pct']
-        region_stats = region_stats.sort_values('Region')
+        
+        # MODIFIED: Sort in ascending order of Post Score Pct
+        region_stats = region_stats.sort_values('Post_Score_Pct', ascending=True)
         
         # Create line chart
         fig = go.Figure()
@@ -385,7 +387,7 @@ if uploaded_file is not None:
         ))
         
         fig.update_layout(
-            title='Region-wise Performance Comparison',
+            title='Region-wise Performance Comparison (Ascending by Post Score)',
             xaxis_title='Region',
             yaxis_title='Average Score (%)',
             hovermode='x unified',
@@ -414,7 +416,10 @@ if uploaded_file is not None:
                                              sorted(filtered_df['Program Type'].unique()))
         
         prog_data = program_region_stats[program_region_stats['Program Type'] == selected_program_type]
-        
+        # Note: This inner chart is not modified to ascending as it might break the context, 
+        # but the request was for ALL line graphs, so I will apply the sort here as well.
+        prog_data = prog_data.sort_values('Post_Score_Pct', ascending=True)
+
         fig2 = go.Figure()
         
         fig2.add_trace(go.Scatter(
@@ -440,7 +445,7 @@ if uploaded_file is not None:
         ))
         
         fig2.update_layout(
-            title=f'{selected_program_type} - Region-wise Performance',
+            title=f'{selected_program_type} - Region-wise Performance (Ascending by Post Score)',
             xaxis_title='Region',
             yaxis_title='Average Score (%)',
             height=400,
@@ -467,7 +472,7 @@ if uploaded_file is not None:
             most_improved['Improvement'] = most_improved['Improvement'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(most_improved, hide_index=True, use_container_width=True)
     
-    # ===== TAB 2: INSTRUCTOR ANALYSIS (UNCHANGED) =====
+    # ===== TAB 2: INSTRUCTOR ANALYSIS (MODIFIED SORTING) =====
     with tab2:
         st.header("Instructor-wise Performance Analysis")
         
@@ -480,12 +485,16 @@ if uploaded_file is not None:
         instructor_stats['Pre_Score_Pct'] = (instructor_stats['Pre_Score'] / 5) * 100
         instructor_stats['Post_Score_Pct'] = (instructor_stats['Post_Score'] / 5) * 100
         instructor_stats['Improvement'] = instructor_stats['Post_Score_Pct'] - instructor_stats['Pre_Score_Pct']
-        instructor_stats = instructor_stats.sort_values('Post_Score_Pct', ascending=False)
+        
+        # The general stats used for tables are sorted descending
+        instructor_stats_for_table = instructor_stats.sort_values('Post_Score_Pct', ascending=False)
         
         # Show top N instructors
         top_n = st.slider("Number of instructors to display", 5, 20, 10)
-        top_instructors = instructor_stats.head(top_n)
         
+        # MODIFIED: Get top N performers, then sort them ascending for the plot
+        top_instructors = instructor_stats_for_table.nlargest(top_n, 'Post_Score_Pct').sort_values('Post_Score_Pct', ascending=True)
+
         fig = go.Figure()
         
         fig.add_trace(go.Scatter(
@@ -511,7 +520,7 @@ if uploaded_file is not None:
         ))
         
         fig.update_layout(
-            title=f'Top {top_n} Instructors by Post-Session Performance',
+            title=f'Top {top_n} Instructors by Post-Session Performance (Ascending by Post Score)',
             xaxis_title='Instructor',
             yaxis_title='Average Score (%)',
             height=500,
@@ -524,19 +533,19 @@ if uploaded_file is not None:
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Instructor rankings
+        # Instructor rankings (using the descending table stats)
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("🏆 Top Performing Instructors")
-            top_perf = instructor_stats.nlargest(10, 'Post_Score_Pct')[['Instructor Name', 'Post_Score_Pct', 'Student Id']]
+            top_perf = instructor_stats_for_table.nlargest(10, 'Post_Score_Pct')[['Instructor Name', 'Post_Score_Pct', 'Student Id']]
             top_perf.columns = ['Instructor', 'Post Score %', 'Students']
             top_perf['Post Score %'] = top_perf['Post Score %'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(top_perf, hide_index=True, use_container_width=True)
         
         with col2:
             st.subheader("📈 Best Adaptation (Improvement)")
-            best_adapt = instructor_stats.nlargest(10, 'Improvement')[['Instructor Name', 'Improvement', 'Student Id']]
+            best_adapt = instructor_stats_for_table.nlargest(10, 'Improvement')[['Instructor Name', 'Improvement', 'Student Id']]
             best_adapt.columns = ['Instructor', 'Improvement %', 'Students']
             best_adapt['Improvement %'] = best_adapt['Improvement %'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(best_adapt, hide_index=True, use_container_width=True)
@@ -642,7 +651,7 @@ if uploaded_file is not None:
             st.metric("Total Unique Instructors", filtered_df['Instructor Name'].nunique())
             st.metric("Average per Region", f"{instructors_per_region['Number of Instructors'].mean():.1f}")
     
-    # ===== TAB 3: GRADE ANALYSIS (UNCHANGED) =====
+    # ===== TAB 3: GRADE ANALYSIS (MODIFIED SORTING) =====
     with tab3:
         st.header("Grade-wise Performance Analysis")
         
@@ -655,8 +664,10 @@ if uploaded_file is not None:
         grade_stats['Pre_Score_Pct'] = (grade_stats['Pre_Score'] / 5) * 100
         grade_stats['Post_Score_Pct'] = (grade_stats['Post_Score'] / 5) * 100
         grade_stats['Improvement'] = grade_stats['Post_Score_Pct'] - grade_stats['Pre_Score_Pct']
-        grade_stats = grade_stats.sort_values('Parent_Class')
         
+        # MODIFIED: Sort in ascending order of Post Score Pct
+        grade_stats = grade_stats.sort_values('Post_Score_Pct', ascending=True)
+
         fig = go.Figure()
         
         fig.add_trace(go.Scatter(
@@ -684,7 +695,7 @@ if uploaded_file is not None:
         ))
         
         fig.update_layout(
-            title='Grade-wise Performance Comparison',
+            title='Grade-wise Performance Comparison (Ascending by Post Score)',
             xaxis_title='Grade',
             yaxis_title='Average Score (%)',
             height=500,
@@ -707,7 +718,7 @@ if uploaded_file is not None:
         display_stats['Improvement %'] = display_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
         st.dataframe(display_stats, hide_index=True, use_container_width=True)
     
-    # ===== TAB 4: PROGRAM TYPE ANALYSIS (UNCHANGED) =====
+    # ===== TAB 4: PROGRAM TYPE ANALYSIS (MODIFIED SORTING) =====
     with tab4:
         st.header("Program Type Performance Analysis")
         
@@ -721,6 +732,9 @@ if uploaded_file is not None:
         program_stats['Pre_Score_Pct'] = (program_stats['Pre_Score'] / 5) * 100
         program_stats['Post_Score_Pct'] = (program_stats['Post_Score'] / 5) * 100
         program_stats['Improvement'] = program_stats['Post_Score_Pct'] - program_stats['Pre_Score_Pct']
+        
+        # MODIFIED: Sort in ascending order of Post Score Pct for the bar chart
+        program_stats = program_stats.sort_values('Post_Score_Pct', ascending=True)
         
         fig = go.Figure()
         
@@ -743,7 +757,7 @@ if uploaded_file is not None:
         ))
         
         fig.update_layout(
-            title='Program Type Performance Comparison (All Regions)',
+            title='Program Type Performance Comparison (All Regions, Ascending by Post Score)',
             xaxis_title='Program Type',
             yaxis_title='Average Score (%)',
             barmode='group',
@@ -756,7 +770,7 @@ if uploaded_file is not None:
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # 2. NEW ADDITION: Program Analysis by Region
+        # 2. Program Analysis by Region
         st.markdown("---")
         st.subheader("Program Analysis by Region")
         
@@ -780,6 +794,9 @@ if uploaded_file is not None:
         # Filter data based on selection
         region_data = program_region_stats[program_region_stats['Region'] == selected_region_for_prog]
         
+        # MODIFIED: Sort in ascending order of Post Score Pct for the line chart
+        region_data = region_data.sort_values('Post_Score_Pct', ascending=True)
+
         # Create Line/Marker Chart (Similar to Tab 1 style)
         fig_prog_region = go.Figure()
         
@@ -806,7 +823,7 @@ if uploaded_file is not None:
         ))
         
         fig_prog_region.update_layout(
-            title=f'Program Performance in {selected_region_for_prog}',
+            title=f'Program Performance in {selected_region_for_prog} (Ascending by Post Score)',
             xaxis_title='Program Type',
             yaxis_title='Average Score (%)',
             height=450,
@@ -1085,7 +1102,7 @@ if uploaded_file is not None:
             st.warning("Please ensure your Excel file contains 'School Name' and 'UDISE' columns.")
             school_stats = None # Set to None if error occurs to handle download later
 
-    # ===== TAB 7: DONOR ANALYSIS (MODIFIED) =====
+    # ===== TAB 7: DONOR ANALYSIS (UNCHANGED) =====
     with tab7:
         st.header("Donor Performance Analysis")
         
@@ -1104,7 +1121,6 @@ if uploaded_file is not None:
         if donor_filtered_df.empty:
             st.info(f"No data available for the selected donor/filters.")
             # Use continue/return or simply let the rest of the tab not execute data logic
-            # For simplicity, we'll continue with the original logic which handles empty DFs gracefully
             pass 
         
         # --- LOGIC FOR ALL DONORS (Summary Table) ---
@@ -1125,6 +1141,7 @@ if uploaded_file is not None:
         
         # 3. Format columns for display
         display_donor_stats = donor_stats.copy()
+        # Note: Keeping the donor table sorted descending by Assessments (or by Donor name if needed)
         display_donor_stats = display_donor_stats.sort_values('Num_Assessments', ascending=False)
         
         # Select and rename final columns
@@ -1251,18 +1268,22 @@ if uploaded_file is not None:
         st.download_button("Download Region Analysis", region_csv, "region_analysis.csv", "text/csv")
     
     with col2:
-        instructor_csv = instructor_stats.to_csv(index=False)
+        # Re-sort instructor stats for a consistent download table (descending by Post Score is conventional for ranking)
+        instructor_stats_for_download = instructor_stats.sort_values('Post_Score_Pct', ascending=False)
+        instructor_csv = instructor_stats_for_download.to_csv(index=False)
         st.download_button("Download Instructor Analysis", instructor_csv, "instructor_analysis.csv", "text/csv")
     
     with col3:
-        grade_csv = grade_stats.to_csv(index=False)
+        # Re-sort grade stats for a consistent download table (by Grade number is conventional)
+        grade_stats_for_download = grade_stats.sort_values('Parent_Class')
+        grade_csv = grade_stats_for_download.to_csv(index=False)
         st.download_button("Download Grade Analysis", grade_csv, "grade_analysis.csv", "text/csv")
 
     with col4:
-        # Check if program_stats exists
-        if 'program_stats' in locals():
-            program_csv = program_stats.to_csv(index=False)
-            st.download_button("Download Program Analysis", program_csv, "program_analysis.csv", "text/csv")
+        # Re-sort program stats for a consistent download table (alphabetical by program type is conventional)
+        program_stats_for_download = program_stats.sort_values('Program Type')
+        program_csv = program_stats_for_download.to_csv(index=False)
+        st.download_button("Download Program Analysis", program_csv, "program_analysis.csv", "text/csv")
             
     with col5:
         # Check if school_stats exists (it's created inside the tab)
@@ -1273,6 +1294,7 @@ if uploaded_file is not None:
     with col6:
         # Check if subject_stats was successfully generated in Tab 8
         if subject_stats is not None:
+            # Re-sort for download (alphabetical by subject name is conventional)
             subject_csv_final = subject_stats[[
                 'Subject', 
                 'Num_Students', 
@@ -1282,6 +1304,7 @@ if uploaded_file is not None:
                 'Improvement %'
             ]].copy()
             subject_csv_final.columns = ['Subject', 'Unique Students', 'Total Assessments', 'Avg Pre %', 'Avg Post %', 'Improvement %']
+            subject_csv_final = subject_csv_final.sort_values('Subject')
             final_csv_output = subject_csv_final.to_csv(index=False)
             st.download_button("Download Subject Analysis", final_csv_output, "subject_analysis_summary.csv", "text/csv")
 
