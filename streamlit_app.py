@@ -88,7 +88,132 @@ def clean_and_process_data(df):
     
     return df, initial_count, cleaned_count
 
-# ===== MAIN APPLICATION (UNCHANGED UP TO TAB 7) =====
+# ===== NEW FUNCTION: SUBJECT ANALYSIS TAB =====
+def tab8_subject_analysis(df):
+    """
+    Generates the Subject-wise Performance and Participation Analysis.
+    """
+    st.header("Subject-wise Performance Analysis")
+    st.markdown("### Performance, Participation, and Assessment Count by Subject")
+    
+    # Check for required 'Subject' column
+    if 'Subject' not in df.columns:
+        st.error("❌ Column 'Subject' not found in the data. Cannot perform Subject Analysis.")
+        return
+
+    # Calculate Subject Statistics
+    subject_stats = df.groupby('Subject').agg(
+        Num_Students=('Student Id', 'nunique'),        # Number of unique students
+        Num_Assessments=('Student Id', 'count'),       # Total number of assessments (rows)
+        Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
+        Avg_Post_Score_Raw=('Post_Score', 'mean')
+    ).reset_index()
+
+    # Calculate percentages and improvement
+    subject_stats['Avg Pre Score %'] = (subject_stats['Avg_Pre_Score_Raw'] / 5) * 100
+    subject_stats['Avg Post Score %'] = (subject_stats['Avg_Post_Score_Raw'] / 5) * 100
+    subject_stats['Improvement %'] = subject_stats['Avg Post Score %'] - subject_stats['Avg Pre Score %']
+    
+    # Sort for consistent plotting
+    subject_stats = subject_stats.sort_values('Subject')
+    
+    # --- Visualization: Performance ---
+    st.subheader("📈 Subject Performance Comparison (Pre vs. Post)")
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=subject_stats['Subject'],
+        y=subject_stats['Avg Pre Score %'],
+        mode='lines+markers+text',
+        name='Pre-Session Average',
+        line=dict(color='#3498db', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in subject_stats['Avg Pre Score %']],
+        textposition='top center',
+        textfont=dict(size=12, color='#3498db')
+    ))
+    
+    fig.add_trace(go.Scatter(
+        x=subject_stats['Subject'],
+        y=subject_stats['Avg Post Score %'],
+        mode='lines+markers+text',
+        name='Post-Session Average',
+        line=dict(color='#e74c3c', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in subject_stats['Avg Post Score %']],
+        textposition='top center',
+        textfont=dict(size=12, color='#e74c3c')
+    ))
+    
+    fig.update_layout(
+        title='Subject-wise Pre and Post Assessment Scores',
+        xaxis_title='Subject',
+        yaxis_title='Average Score (%)',
+        hovermode='x unified',
+        height=500,
+        plot_bgcolor='#2b2b2b',
+        paper_bgcolor='#1e1e1e',
+        font=dict(color='white'),
+        yaxis=dict(range=[0, 100], gridcolor='#404040'),
+        xaxis=dict(gridcolor='#404040')
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # --- Detailed Table and Participation Metrics ---
+    st.markdown("---")
+    st.subheader("📋 Subject Participation and Detailed Metrics")
+
+    # Create the display dataframe
+    display_subject_stats = subject_stats.copy()
+    display_subject_stats = display_subject_stats[[
+        'Subject', 
+        'Num_Students', 
+        'Num_Assessments', 
+        'Avg Pre Score %', 
+        'Avg Post Score %', 
+        'Improvement %'
+    ]]
+    
+    display_subject_stats.columns = [
+        'Subject', 
+        'Unique Students', 
+        'Total Assessments', 
+        'Avg Pre %', 
+        'Avg Post %', 
+        'Improvement %'
+    ]
+    
+    # Apply string formatting
+    display_subject_stats['Avg Pre %'] = display_subject_stats['Avg Pre %'].apply(lambda x: f"{x:.1f}%")
+    display_subject_stats['Avg Post %'] = display_subject_stats['Avg Post %'].apply(lambda x: f"{x:.1f}%")
+    display_subject_stats['Improvement %'] = display_subject_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
+
+    st.dataframe(display_subject_stats, hide_index=True, use_container_width=True)
+    
+    # --- Key Participation Metrics ---
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Unique Subjects", len(subject_stats))
+    with col2:
+        st.metric("Total Unique Students Assessed", subject_stats['Num_Students'].sum())
+    with col3:
+        st.metric("Total Assessments Conducted", subject_stats['Num_Assessments'].sum())
+        
+    # Download Button
+    st.markdown("---")
+    subject_csv = display_subject_stats.to_csv(index=False)
+    st.download_button(
+        "📥 Download Subject Analysis Data (CSV)",
+        subject_csv,
+        "subject_analysis.csv",
+        "text/csv"
+    )
+    
+    return subject_stats # Return for use in the main download section
+
+# ===== MAIN APPLICATION (MODIFIED FOR NEW TAB) =====
 
 # Title and description
 st.title("📊 Student Assessment Analysis Platform")
@@ -105,13 +230,11 @@ if uploaded_file is not None:
             raw_df = pd.read_excel(uploaded_file)
             
             # Basic checks for required columns
-            if 'Date_Post' not in raw_df.columns:
-                st.error("❌ Column 'Date_Post' not found in uploaded file. Please add this column and try again.")
-                st.stop()
+            required_cols = ['Date_Post', 'Donor', 'Subject']
+            missing_cols = [col for col in required_cols if col not in raw_df.columns]
             
-            # NEW CHECK FOR DONOR COLUMN
-            if 'Donor' not in raw_df.columns:
-                st.error("❌ Column 'Donor' not found in uploaded file. This column is required for Donor Analysis. Please add this column and try again.")
+            if missing_cols:
+                st.error(f"❌ Missing required columns: {', '.join(missing_cols)}. Please add these columns and try again.")
                 st.stop()
                 
             df, initial_count, cleaned_count = clean_and_process_data(raw_df)
@@ -211,10 +334,13 @@ if uploaded_file is not None:
     with col6:
         st.metric("Min Tests/Student", f"{min_tests}")
     
-    # ===== TABS FOR DIFFERENT ANALYSES (UNCHANGED) =====
+    # ===== TABS FOR DIFFERENT ANALYSES (MODIFIED TO ADD TAB 8) =====
     st.markdown("---")
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📍 Region Analysis", "👤 Instructor Analysis", "📚 Grade Analysis", "📊 Program Type Analysis", "👥 Student Participation", "🏫 School Analysis", "💰 Donor Analysis"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📍 Region Analysis", "👤 Instructor Analysis", "📚 Grade Analysis", "📊 Program Type Analysis", "👥 Student Participation", "🏫 School Analysis", "💰 Donor Analysis", "🔬 Subject Analysis"])
     
+    # Placeholder for subject_stats for download section
+    subject_stats = None
+
     # ===== TAB 1: REGION ANALYSIS (UNCHANGED) =====
     with tab1:
         st.header("Region-wise Performance Analysis")
@@ -957,6 +1083,7 @@ if uploaded_file is not None:
         except KeyError as e:
             st.error(f"Missing required columns for School Analysis: {e}")
             st.warning("Please ensure your Excel file contains 'School Name' and 'UDISE' columns.")
+            school_stats = None # Set to None if error occurs to handle download later
 
     # ===== TAB 7: DONOR ANALYSIS (MODIFIED) =====
     with tab7:
@@ -1103,13 +1230,21 @@ if uploaded_file is not None:
         else:
             # If donor_filtered_df is empty, show the total summary and inform the user
             st.info("No records match the current filter selection.")
+            
+    # ===== TAB 8: SUBJECT ANALYSIS (NEW) =====
+    with tab8:
+        # Call the new function
+        if not filtered_df.empty:
+            subject_stats = tab8_subject_analysis(filtered_df)
+        else:
+            st.info("No data to display after applying filters.")
 
     
-    # ===== DOWNLOAD SECTION (Modified to ensure variables exist) =====
+    # ===== DOWNLOAD SECTION (Modified to include Subject and handle potential missing variables) =====
     st.markdown("---")
     st.subheader("📥 Download Analysis Reports")
     
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
         region_csv = region_stats.to_csv(index=False)
@@ -1124,16 +1259,31 @@ if uploaded_file is not None:
         st.download_button("Download Grade Analysis", grade_csv, "grade_analysis.csv", "text/csv")
 
     with col4:
+        # Check if program_stats exists
+        if 'program_stats' in locals():
+            program_csv = program_stats.to_csv(index=False)
+            st.download_button("Download Program Analysis", program_csv, "program_analysis.csv", "text/csv")
+            
+    with col5:
         # Check if school_stats exists (it's created inside the tab)
-        if 'school_stats' in locals():
+        if 'school_stats' in locals() and school_stats is not None:
             school_csv = school_stats.to_csv(index=False)
             st.download_button("Download School Analysis", school_csv, "school_analysis_summary.csv", "text/csv")
 
-    with col5:
-        # Check if donor_stats exists (it's created inside the tab)
-        if 'display_donor_stats' in locals():
-            # Use the donor_csv variable created in Tab 7
-            st.download_button("Download Donor Analysis", donor_csv, "donor_analysis_summary.csv", "text/csv")
+    with col6:
+        # Check if subject_stats was successfully generated in Tab 8
+        if subject_stats is not None:
+            subject_csv_final = subject_stats[[
+                'Subject', 
+                'Num_Students', 
+                'Num_Assessments', 
+                'Avg Pre Score %', 
+                'Avg Post Score %', 
+                'Improvement %'
+            ]].copy()
+            subject_csv_final.columns = ['Subject', 'Unique Students', 'Total Assessments', 'Avg Pre %', 'Avg Post %', 'Improvement %']
+            final_csv_output = subject_csv_final.to_csv(index=False)
+            st.download_button("Download Subject Analysis", final_csv_output, "subject_analysis_summary.csv", "text/csv")
 
 
 else:
@@ -1147,7 +1297,8 @@ else:
     **Identification Columns:**
     - `Region` - Geographic region
     - `School Name` - Name of the school
-    - **`Donor` - The donor/partner associated with the record (NEW)**
+    - `Donor` - The donor/partner associated with the record
+    - **`Subject` - The subject name (NEW REQUIREMENT)**
     - `UDISE` - School unique ID
     - `Student Id` - Unique student identifier
     - `Class` - Class with section (e.g., 6-A, 7-B)
