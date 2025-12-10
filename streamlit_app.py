@@ -88,20 +88,22 @@ def clean_and_process_data(df):
     
     return df, initial_count, cleaned_count
 
-# ===== NEW FUNCTION: SUBJECT ANALYSIS TAB (MODIFIED SORTING) =====
+# ===== NEW FUNCTION: SUBJECT ANALYSIS TAB (MODIFIED FOR REGION ANALYSIS) =====
 def tab8_subject_analysis(df):
     """
-    Generates the Subject-wise Performance and Participation Analysis.
+    Generates the Subject-wise Performance and Participation Analysis, 
+    including breakdowns by Region.
     """
     st.header("Subject-wise Performance Analysis")
     st.markdown("### Performance, Participation, and Assessment Count by Subject")
     
-    # Check for required 'Subject' column
-    if 'Subject' not in df.columns:
-        st.error("❌ Column 'Subject' not found in the data. Cannot perform Subject Analysis.")
+    # Check for required columns
+    required_cols = ['Subject', 'Region']
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"❌ Columns {required_cols} not found in the data. Cannot perform Subject-Region Analysis.")
         return
 
-    # Calculate Subject Statistics
+    # Calculate Subject Statistics (Overall)
     subject_stats = df.groupby('Subject').agg(
         Num_Students=('Student Id', 'nunique'),        # Number of unique students
         Num_Assessments=('Student Id', 'count'),       # Total number of assessments (rows)
@@ -117,8 +119,8 @@ def tab8_subject_analysis(df):
     # MODIFIED: Sort in ascending order of Post Score %
     subject_stats = subject_stats.sort_values('Avg Post Score %', ascending=True)
     
-    # --- Visualization: Performance ---
-    st.subheader("📈 Subject Performance Comparison (Pre vs. Post)")
+    # --- Visualization: Performance (Overall) ---
+    st.subheader("📈 Overall Subject Performance Comparison (Pre vs. Post)")
     
     fig = go.Figure()
     
@@ -147,7 +149,7 @@ def tab8_subject_analysis(df):
     ))
     
     fig.update_layout(
-        title='Subject-wise Pre and Post Assessment Scores',
+        title='Subject-wise Pre and Post Assessment Scores (Overall)',
         xaxis_title='Subject',
         yaxis_title='Average Score (%)',
         hovermode='x unified',
@@ -161,9 +163,124 @@ def tab8_subject_analysis(df):
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # --- Detailed Table and Participation Metrics ---
+    # Calculate Subject-Region Statistics for breakdowns
+    subject_region_stats = df.groupby(['Subject', 'Region']).agg(
+        Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
+        Avg_Post_Score_Raw=('Post_Score', 'mean')
+    ).reset_index()
+    
+    subject_region_stats['Pre_Score_Pct'] = (subject_region_stats['Avg_Pre_Score_Raw'] / 5) * 100
+    subject_region_stats['Post_Score_Pct'] = (subject_region_stats['Avg_Post_Score_Raw'] / 5) * 100
+    
     st.markdown("---")
-    st.subheader("📋 Subject Participation and Detailed Metrics")
+    
+    # ====================================================================
+    # 1. NEW GRAPH: Subject Analysis per Region 
+    # ====================================================================
+    st.subheader("🗺️ Subject Performance within a Selected Region")
+    
+    unique_regions = sorted(df['Region'].unique())
+    selected_region_for_subject = st.selectbox("Select Region for Subject Breakdown", unique_regions, key='region_subject_select')
+
+    # Filter data for the selected region
+    region_subject_data = subject_region_stats[subject_region_stats['Region'] == selected_region_for_subject].copy()
+    region_subject_data = region_subject_data.sort_values('Post_Score_Pct', ascending=True)
+
+    fig_subj_region = go.Figure()
+    
+    fig_subj_region.add_trace(go.Scatter(
+        x=region_subject_data['Subject'],
+        y=region_subject_data['Pre_Score_Pct'],
+        mode='lines+markers+text',
+        name='Pre-Session Average',
+        line=dict(color='#8e44ad', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in region_subject_data['Pre_Score_Pct']],
+        textposition='top center'
+    ))
+    
+    fig_subj_region.add_trace(go.Scatter(
+        x=region_subject_data['Subject'],
+        y=region_subject_data['Post_Score_Pct'],
+        mode='lines+markers+text',
+        name='Post-Session Average',
+        line=dict(color='#f39c12', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in region_subject_data['Post_Score_Pct']],
+        textposition='top center'
+    ))
+    
+    fig_subj_region.update_layout(
+        title=f'Subject Performance in **{selected_region_for_subject}** (Ascending by Post Score)',
+        xaxis_title='Subject',
+        yaxis_title='Average Score (%)',
+        hovermode='x unified',
+        height=500,
+        plot_bgcolor='#2b2b2b',
+        paper_bgcolor='#1e1e1e',
+        font=dict(color='white'),
+        yaxis=dict(range=[0, 100], gridcolor='#404040'),
+        xaxis=dict(gridcolor='#404040')
+    )
+    
+    st.plotly_chart(fig_subj_region, use_container_width=True)
+    
+    st.markdown("---")
+
+    # ====================================================================
+    # 2. NEW GRAPH: Region Analysis per Subject 
+    # ====================================================================
+    st.subheader("📍 Region Performance for a Selected Subject")
+    
+    unique_subjects = sorted(df['Subject'].unique())
+    selected_subject_for_region = st.selectbox("Select Subject for Region Breakdown", unique_subjects, key='subject_region_select')
+
+    # Filter data for the selected subject
+    subject_region_data = subject_region_stats[subject_region_stats['Subject'] == selected_subject_for_region].copy()
+    subject_region_data = subject_region_data.sort_values('Post_Score_Pct', ascending=True)
+
+    fig_region_subj = go.Figure()
+    
+    fig_region_subj.add_trace(go.Scatter(
+        x=subject_region_data['Region'],
+        y=subject_region_data['Pre_Score_Pct'],
+        mode='lines+markers+text',
+        name='Pre-Session Average',
+        line=dict(color='#1abc9c', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in subject_region_data['Pre_Score_Pct']],
+        textposition='top center'
+    ))
+    
+    fig_region_subj.add_trace(go.Scatter(
+        x=subject_region_data['Region'],
+        y=subject_region_data['Post_Score_Pct'],
+        mode='lines+markers+text',
+        name='Post-Session Average',
+        line=dict(color='#e74c3c', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in subject_region_data['Post_Score_Pct']],
+        textposition='top center'
+    ))
+    
+    fig_region_subj.update_layout(
+        title=f'Region Performance in **{selected_subject_for_region}** (Ascending by Post Score)',
+        xaxis_title='Region',
+        yaxis_title='Average Score (%)',
+        hovermode='x unified',
+        height=500,
+        plot_bgcolor='#2b2b2b',
+        paper_bgcolor='#1e1e1e',
+        font=dict(color='white'),
+        yaxis=dict(range=[0, 100], gridcolor='#404040'),
+        xaxis=dict(gridcolor='#404040')
+    )
+    
+    st.plotly_chart(fig_region_subj, use_container_width=True)
+    
+    # --- Detailed Table and Participation Metrics (UNCHANGED) ---
+    st.markdown("---")
+    st.subheader("📋 Subject Participation and Detailed Metrics (Overall)")
 
     # Create the display dataframe
     display_subject_stats = subject_stats.copy()
@@ -231,7 +348,7 @@ if uploaded_file is not None:
             
             # Basic checks for required columns
             required_cols = ['Date_Post', 'Donor', 'Subject']
-            missing_cols = [col for col in required_cols if col not in raw_df.columns]
+            missing_cols = [col for col in required_df.columns if col not in raw_df.columns]
             
             if missing_cols:
                 st.error(f"❌ Missing required columns: {', '.join(missing_cols)}. Please add these columns and try again.")
@@ -792,7 +909,7 @@ if uploaded_file is not None:
                                              unique_regions_in_data)
         
         # Filter data based on selection
-        region_data = program_region_stats[program_region_stats['Region'] == selected_region_for_prog]
+        region_data = program_region_stats[program_region_stats['Program Type'] == selected_program_for_prog]
         
         # MODIFIED: Sort in ascending order of Post Score Pct for the line chart
         region_data = region_data.sort_values('Post_Score_Pct', ascending=True)
