@@ -142,44 +142,26 @@ if uploaded_file is not None:
     # Sidebar filters
     st.sidebar.header("🔍 Filters")
     
-    # --- Region filter (Multiselect) ---
-    all_regions = sorted(df['Region'].unique().tolist())
-    selected_regions = st.sidebar.multiselect(
-        "Select Region(s)", 
-        options=all_regions, 
-        default=all_regions # Default to all selected
-    )
+    # Region filter
+    all_regions = ['All'] + sorted(df['Region'].unique().tolist())
+    selected_region = st.sidebar.selectbox("Select Region", all_regions)
     
-    # --- Program Type filter (Multiselect) ---
-    all_programs = sorted(df['Program Type'].unique().tolist())
-    selected_programs = st.sidebar.multiselect(
-        "Select Program Type(s)", 
-        options=all_programs, 
-        default=all_programs # Default to all selected
-    )
+    # Program Type filter
+    all_programs = ['All'] + sorted(df['Program Type'].unique().tolist())
+    selected_program = st.sidebar.selectbox("Select Program Type", all_programs)
     
-    # --- Parent Class filter (Multiselect) ---
-    all_classes = sorted(df['Parent_Class'].unique().tolist())
-    selected_classes = st.sidebar.multiselect(
-        "Select Grade(s)", 
-        options=all_classes, 
-        default=all_classes # Default to all selected
-    )
+    # Parent Class filter
+    all_classes = ['All'] + sorted(df['Parent_Class'].unique().tolist())
+    selected_class = st.sidebar.selectbox("Select Grade", all_classes)
     
     # Apply filters
     filtered_df = df.copy()
-    
-    # Apply filters for regions
-    if selected_regions:
-        filtered_df = filtered_df[filtered_df['Region'].isin(selected_regions)]
-        
-    # Apply filters for program types
-    if selected_programs:
-        filtered_df = filtered_df[filtered_df['Program Type'].isin(selected_programs)]
-        
-    # Apply filters for classes
-    if selected_classes:
-        filtered_df = filtered_df[filtered_df['Parent_Class'].isin(selected_classes)]
+    if selected_region != 'All':
+        filtered_df = filtered_df[filtered_df['Region'] == selected_region]
+    if selected_program != 'All':
+        filtered_df = filtered_df[filtered_df['Program Type'] == selected_program]
+    if selected_class != 'All':
+        filtered_df = filtered_df[filtered_df['Parent_Class'] == selected_class]
     
     # ===== KEY METRICS =====
     st.markdown("---")
@@ -293,61 +275,55 @@ if uploaded_file is not None:
         # Region by Program Type
         st.subheader("Region Analysis by Program Type")
         
-        # Determine the available options in the filtered data
-        available_programs = sorted(filtered_df['Program Type'].unique())
+        program_region_stats = filtered_df.groupby(['Region', 'Program Type']).agg({
+            'Pre_Score': 'mean',
+            'Post_Score': 'mean'
+        }).reset_index()
         
-        if available_programs:
-            selected_program_type = st.selectbox("Select Program Type for Detailed View", 
-                                                 available_programs)
-            
-            program_region_stats = filtered_df.groupby(['Region', 'Program Type']).agg({
-                'Pre_Score': 'mean',
-                'Post_Score': 'mean'
-            }).reset_index()
-            
-            program_region_stats['Pre_Score_Pct'] = (program_region_stats['Pre_Score'] / 5) * 100
-            program_region_stats['Post_Score_Pct'] = (program_region_stats['Post_Score'] / 5) * 100
-            
-            prog_data = program_region_stats[program_region_stats['Program Type'] == selected_program_type]
-            
-            fig2 = go.Figure()
-            
-            fig2.add_trace(go.Scatter(
-                x=prog_data['Region'],
-                y=prog_data['Pre_Score_Pct'],
-                mode='lines+markers+text',
-                name='Pre-Session',
-                line=dict(color='#3498db', width=3),
-                marker=dict(size=10),
-                text=[f"{val:.0f}%" for val in prog_data['Pre_Score_Pct']],
-                textposition='top center'
-            ))
-            
-            fig2.add_trace(go.Scatter(
-                x=prog_data['Region'],
-                y=prog_data['Post_Score_Pct'],
-                mode='lines+markers+text',
-                name='Post-Session',
-                line=dict(color='#e74c3c', width=3),
-                marker=dict(size=10),
-                text=[f"{val:.0f}%" for val in prog_data['Post_Score_Pct']],
-                textposition='top center'
-            ))
-            
-            fig2.update_layout(
-                title=f'{selected_program_type} - Region-wise Performance',
-                xaxis_title='Region',
-                yaxis_title='Average Score (%)',
-                height=400,
-                plot_bgcolor='#2b2b2b',
-                paper_bgcolor='#1e1e1e',
-                font=dict(color='white'),
-                yaxis=dict(range=[0, 100], gridcolor='#404040')
-            )
-            
-            st.plotly_chart(fig2, use_container_width=True)
-        else:
-             st.info("No Program Types available in the currently filtered data.")
+        program_region_stats['Pre_Score_Pct'] = (program_region_stats['Pre_Score'] / 5) * 100
+        program_region_stats['Post_Score_Pct'] = (program_region_stats['Post_Score'] / 5) * 100
+        
+        selected_program_type = st.selectbox("Select Program Type for Detailed View", 
+                                             sorted(filtered_df['Program Type'].unique()))
+        
+        prog_data = program_region_stats[program_region_stats['Program Type'] == selected_program_type]
+        
+        fig2 = go.Figure()
+        
+        fig2.add_trace(go.Scatter(
+            x=prog_data['Region'],
+            y=prog_data['Pre_Score_Pct'],
+            mode='lines+markers+text',
+            name='Pre-Session',
+            line=dict(color='#3498db', width=3),
+            marker=dict(size=10),
+            text=[f"{val:.0f}%" for val in prog_data['Pre_Score_Pct']],
+            textposition='top center'
+        ))
+        
+        fig2.add_trace(go.Scatter(
+            x=prog_data['Region'],
+            y=prog_data['Post_Score_Pct'],
+            mode='lines+markers+text',
+            name='Post-Session',
+            line=dict(color='#e74c3c', width=3),
+            marker=dict(size=10),
+            text=[f"{val:.0f}%" for val in prog_data['Post_Score_Pct']],
+            textposition='top center'
+        ))
+        
+        fig2.update_layout(
+            title=f'{selected_program_type} - Region-wise Performance',
+            xaxis_title='Region',
+            yaxis_title='Average Score (%)',
+            height=400,
+            plot_bgcolor='#2b2b2b',
+            paper_bgcolor='#1e1e1e',
+            font=dict(color='white'),
+            yaxis=dict(range=[0, 100], gridcolor='#404040')
+        )
+        
+        st.plotly_chart(fig2, use_container_width=True)
         
         # Top performing and most improved regions
         col1, col2 = st.columns(2)
@@ -669,55 +645,52 @@ if uploaded_file is not None:
         
         # Get list of unique regions in the filtered data
         unique_regions_in_data = sorted(filtered_df['Region'].unique())
+
+        # Selectbox to choose Region
+        selected_region_for_prog = st.selectbox("Select Region to compare Programs", 
+                                             unique_regions_in_data)
         
-        if unique_regions_in_data:
-            # Selectbox to choose Region
-            selected_region_for_prog = st.selectbox("Select Region to compare Programs", 
-                                                 unique_regions_in_data)
-            
-            # Filter data based on selection
-            region_data = program_region_stats[program_region_stats['Region'] == selected_region_for_prog]
-            
-            # Create Line/Marker Chart (Similar to Tab 1 style)
-            fig_prog_region = go.Figure()
-            
-            fig_prog_region.add_trace(go.Scatter(
-                x=region_data['Program Type'],
-                y=region_data['Pre_Score_Pct'],
-                mode='lines+markers+text',
-                name='Pre-Session',
-                line=dict(color='#1abc9c', width=3),
-                marker=dict(size=10),
-                text=[f"{val:.0f}%" for val in region_data['Pre_Score_Pct']],
-                textposition='top center'
-            ))
-            
-            fig_prog_region.add_trace(go.Scatter(
-                x=region_data['Program Type'],
-                y=region_data['Post_Score_Pct'],
-                mode='lines+markers+text',
-                name='Post-Session',
-                line=dict(color='#e67e22', width=3),
-                marker=dict(size=10),
-                text=[f"{val:.0f}%" for val in region_data['Post_Score_Pct']],
-                textposition='top center'
-            ))
-            
-            fig_prog_region.update_layout(
-                title=f'Program Performance in {selected_region_for_prog}',
-                xaxis_title='Program Type',
-                yaxis_title='Average Score (%)',
-                height=450,
-                plot_bgcolor='#2b2b2b',
-                paper_bgcolor='#1e1e1e',
-                font=dict(color='white'),
-                yaxis=dict(range=[0, 110], gridcolor='#404040'),
-                xaxis=dict(gridcolor='#404040')
-            )
-            
-            st.plotly_chart(fig_prog_region, use_container_width=True)
-        else:
-            st.info("No Regions available in the currently filtered data to compare programs.")
+        # Filter data based on selection
+        region_data = program_region_stats[program_region_stats['Region'] == selected_region_for_prog]
+        
+        # Create Line/Marker Chart (Similar to Tab 1 style)
+        fig_prog_region = go.Figure()
+        
+        fig_prog_region.add_trace(go.Scatter(
+            x=region_data['Program Type'],
+            y=region_data['Pre_Score_Pct'],
+            mode='lines+markers+text',
+            name='Pre-Session',
+            line=dict(color='#1abc9c', width=3),
+            marker=dict(size=10),
+            text=[f"{val:.0f}%" for val in region_data['Pre_Score_Pct']],
+            textposition='top center'
+        ))
+        
+        fig_prog_region.add_trace(go.Scatter(
+            x=region_data['Program Type'],
+            y=region_data['Post_Score_Pct'],
+            mode='lines+markers+text',
+            name='Post-Session',
+            line=dict(color='#e67e22', width=3),
+            marker=dict(size=10),
+            text=[f"{val:.0f}%" for val in region_data['Post_Score_Pct']],
+            textposition='top center'
+        ))
+        
+        fig_prog_region.update_layout(
+            title=f'Program Performance in {selected_region_for_prog}',
+            xaxis_title='Program Type',
+            yaxis_title='Average Score (%)',
+            height=450,
+            plot_bgcolor='#2b2b2b',
+            paper_bgcolor='#1e1e1e',
+            font=dict(color='white'),
+            yaxis=dict(range=[0, 110], gridcolor='#404040'),
+            xaxis=dict(gridcolor='#404040')
+        )
+        
+        st.plotly_chart(fig_prog_region, use_container_width=True)
         
         # 3. Program stats table (Existing)
         st.subheader("Detailed Program Type Statistics")
@@ -1100,7 +1073,7 @@ else:
     **Identification Columns:**
     - `Region` - Geographic region
     - `School Name` - Name of the school
-    - **`Donor`** - The donor/partner associated with the record
+    - **`Donor` - The donor/partner associated with the record (NEW)**
     - `UDISE` - School unique ID
     - `Student Id` - Unique student identifier
     - `Class` - Class with section (e.g., 6-A, 7-B)
