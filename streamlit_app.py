@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 # Set page configuration
 st.set_page_config(page_title="Student Assessment Dashboard", layout="wide", page_icon="📊")
 
-# ===== DATA CLEANING FUNCTIONS (UNCHANGED) =====
+# ===== DATA CLEANING FUNCTIONS (MODIFIED FOR DONOR STANDARDIZATION) =====
 def clean_and_process_data(df):
     """
     Clean and process student assessment data
@@ -83,10 +83,16 @@ def clean_and_process_data(df):
     
     # Filter for grades 6-10 only
     df = df[df['Parent_Class'].isin(['6', '7', '8', '9', '10'])]
+
+    # ===== STEP 5: STANDARDIZE DONOR NAMES (NEW FIX FOR CASE-SENSITIVITY) =====
+    if 'Donor' in df.columns:
+        # Convert all donor names to uppercase to treat 'Adobe', 'ADOBE', 'adobe' as a single entity.
+        df['Donor'] = df['Donor'].astype(str).str.upper()
+    # -------------------------------------------------------------------------
     
     return df, initial_count, cleaned_count
 
-# ===== TAB 8: SUBJECT ANALYSIS (MODIFIED) =====
+# ===== TAB 8: SUBJECT ANALYSIS (UNCHANGED) =====
 def tab8_subject_analysis(df):
     """
     Generates the Subject-wise Performance and Participation Analysis, 
@@ -349,7 +355,7 @@ def tab8_subject_analysis(df):
     
     return subject_stats # Return for use in the main download section
 
-# ===== MAIN APPLICATION (MODIFIED TO FIX ERRORS) =====
+# ===== MAIN APPLICATION (UNCHANGED) =====
 
 # Title and description
 st.title("📊 Student Assessment Analysis Platform")
@@ -415,6 +421,9 @@ if uploaded_file is not None:
     # Sidebar filters
     st.sidebar.header("🔍 Filters")
     
+    # IMPORTANT NOTE TO USER: Check these filters!
+    st.sidebar.warning("❗️ Ensure ALL filters are set to 'All' for full Donor Analysis.")
+
     # Region filter
     all_regions = ['All'] + sorted(df['Region'].unique().tolist())
     selected_region = st.sidebar.selectbox("Select Region", all_regions)
@@ -636,7 +645,7 @@ if uploaded_file is not None:
             most_improved['Improvement'] = most_improved['Improvement'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(most_improved, hide_index=True, use_container_width=True)
     
-    # ===== TAB 2: INSTRUCTOR ANALYSIS (FIXED TOTAL INSTRUCTORS COUNT) =====
+    # ===== TAB 2: INSTRUCTOR ANALYSIS (UNCHANGED) =====
     with tab2:
         st.header("Instructor-wise Performance Analysis")
         
@@ -822,7 +831,7 @@ if uploaded_file is not None:
             st.metric("Total Unique Instructors", total_unique_instructors) 
             st.metric("Average per Region", f"{instructors_per_region['Number of Instructors'].mean():.1f}")
     
-    # ===== TAB 3: GRADE ANALYSIS (FIXED STRING FORMATTING & SORTING) =====
+    # ===== TAB 3: GRADE ANALYSIS (UNCHANGED) =====
     with tab3:
         st.header("Grade-wise Performance Analysis")
         
@@ -900,7 +909,7 @@ if uploaded_file is not None:
         
         st.dataframe(display_stats, hide_index=True, use_container_width=True)
     
-    # ===== TAB 4: PROGRAM TYPE ANALYSIS (MODIFIED SORTING) =====
+    # ===== TAB 4: PROGRAM TYPE ANALYSIS (UNCHANGED) =====
     with tab4:
         st.header("Program Type Performance Analysis")
         
@@ -1293,31 +1302,25 @@ if uploaded_file is not None:
             st.warning("Please ensure your Excel file contains 'School Name' and 'UDISE' columns.")
             school_stats = None # Set to None if error occurs to handle download later
 
-    # ===== TAB 7: DONOR ANALYSIS (FIXED STRING FORMATTING) =====
+    # ===== TAB 7: DONOR ANALYSIS (SIMPLIFIED AFTER DATA CLEANING) =====
     with tab7:
         st.header("Donor Performance Analysis")
         
         # 1. ADD DONOR FILTER
-        # For the selectbox, use unique donors from the globally filtered data for user experience
+        # Since df['Donor'] is now uppercase, the list will only contain unique, standardized names.
         all_donors = ['All Donors'] + sorted(filtered_df['Donor'].unique().tolist())
         selected_donor = st.selectbox("Select Donor for Individual Analysis", all_donors)
         
-        # Apply the donor filter to create donor_filtered_df
-        # FIX APPLIED HERE: If a specific donor is selected, use the master 'df' (cleaned data before global
-        # Region/Program/Grade filters) to ensure all regions for that donor are included.
+        # Determine the DataFrame to use for the detailed analysis section.
         if selected_donor != 'All Donors':
-            # 'df' is the full cleaned data from the main application block.
-            if 'df' in locals():
-                # Use the master cleaned DataFrame 'df' to bypass the global Region/Program/Grade filters
-                donor_filtered_df = df[df['Donor'] == selected_donor].copy() 
-            else:
-                # Fallback (should not happen in this code structure)
-                donor_filtered_df = filtered_df[filtered_df['Donor'] == selected_donor].copy()
-                st.warning("Could not access master data ('df'). Global Region/Program/Grade filters may apply.")
-                
+            # *** SIMPLIFIED FIX: Uses exact match against the master 'df' as the data is now standardized to uppercase in clean_and_process_data ***
+            donor_filtered_df = df[
+                df['Donor'] == selected_donor
+            ].copy() 
+            
             st.subheader(f"Metrics for Donor: **{selected_donor}**")
         else:
-            # If 'All Donors' is selected, respect the global sidebar filters
+            # If 'All Donors' is selected, respect the global sidebar filters (filtered_df)
             donor_filtered_df = filtered_df.copy()
             st.subheader("Metrics for All Donors (Summary View)")
 
@@ -1328,6 +1331,7 @@ if uploaded_file is not None:
         else:
         
             # --- LOGIC FOR ALL DONORS (Summary Table) ---
+            # NOTE: This table *must* respect the sidebar filters, so it uses filtered_df
             
             # 1. Calculate Donor Statistics (Grouping by Donor)
             donor_stats = filtered_df.groupby('Donor').agg(
@@ -1375,13 +1379,14 @@ if uploaded_file is not None:
             display_donor_stats['Improvement %'] = display_donor_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
             
             st.subheader("Detailed Donor Analysis Table (All Donors)")
+            # This table now correctly shows a single row per donor name due to the data cleaning step
             st.dataframe(display_donor_stats, hide_index=True, use_container_width=True)
             st.markdown("---")
             
             # --- LOGIC FOR INDIVIDUAL DONOR (Specific Metrics) ---
 
             
-            # Calculate Metrics for the Selected Donor/All
+            # Calculate Metrics for the Selected Donor/All (uses the now correctly filtered donor_filtered_df)
             donor_specific_stats = {
                 'Avg Pre Score %': (donor_filtered_df['Pre_Score'].mean() / 5) * 100,
                 'Avg Post Score %': (donor_filtered_df['Post_Score'].mean() / 5) * 100,
@@ -1407,6 +1412,9 @@ if uploaded_file is not None:
             st.markdown("---")
             
             # Breakdown by Region for the Selected Donor
+            # NOTE: This calculation uses the donor_filtered_df which is now guaranteed 
+            # to contain ALL regions for the selected donor, as it used the full, 
+            # standardized data from 'df'
             st.subheader(f"Region Breakdown for {selected_donor}")
             
             donor_region_stats = donor_filtered_df.groupby('Region').agg(
@@ -1465,7 +1473,7 @@ if uploaded_file is not None:
             )
 
             
-    # ===== TAB 8: SUBJECT ANALYSIS (NEW/MODIFIED) =====
+    # ===== TAB 8: SUBJECT ANALYSIS (UNCHANGED) =====
     with tab8:
         # Call the new function
         if not filtered_df.empty:
@@ -1562,6 +1570,7 @@ else:
     1. ✅ Data is cleaned (incomplete records removed)
     2. ✅ Scores are calculated automatically
     3. ✅ Program types are standardized
-    4. ✅ Interactive dashboard is generated
-    5. ✅ Download options for all analyses
+    4. ✅ **Donor names are standardized to UPPERCASE (Fix for 'Adobe' vs 'ADOBE')**
+    5. ✅ Interactive dashboard is generated
+    6. ✅ Download options for all analyses
     """)
