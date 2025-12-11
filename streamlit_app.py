@@ -1293,89 +1293,83 @@ if uploaded_file is not None:
             st.warning("Please ensure your Excel file contains 'School Name' and 'UDISE' columns.")
             school_stats = None # Set to None if error occurs to handle download later
 
-    # ===== TAB 7: DONOR ANALYSIS (FIXED FORCED ACCESS TO FULL DATA FOR REGION BREAKDOWN) =====
+    # ===== TAB 7: DONOR ANALYSIS (FIXED STRING FORMATTING) =====
     with tab7:
         st.header("Donor Performance Analysis")
         
         # 1. ADD DONOR FILTER
-        # For the selectbox, use unique donors from the globally filtered data for user experience
         all_donors = ['All Donors'] + sorted(filtered_df['Donor'].unique().tolist())
         selected_donor = st.selectbox("Select Donor for Individual Analysis", all_donors)
         
-        # Determine the DataFrame to use for the detailed analysis section.
+        # Apply the donor filter to create donor_filtered_df
         if selected_donor != 'All Donors':
-            # *** FIX APPLIED HERE: USE MASTER 'df' ***
-            # Use the original, full DataFrame 'df' for individual donor analysis 
-            # to ensure all regions are included, regardless of sidebar filters.
-            donor_filtered_df = df[df['Donor'] == selected_donor].copy() 
+            donor_filtered_df = filtered_df[filtered_df['Donor'] == selected_donor]
             st.subheader(f"Metrics for Donor: **{selected_donor}**")
         else:
-            # If 'All Donors' is selected, respect the global sidebar filters (filtered_df)
-            donor_filtered_df = filtered_df.copy()
+            donor_filtered_df = filtered_df
             st.subheader("Metrics for All Donors (Summary View)")
 
         if donor_filtered_df.empty:
             st.info(f"No data available for the selected donor/filters.")
             # Use continue/return or simply let the rest of the tab not execute data logic
             pass 
-        else:
         
-            # --- LOGIC FOR ALL DONORS (Summary Table) ---
-            # NOTE: This table *must* respect the sidebar filters, so it uses filtered_df
-            
-            # 1. Calculate Donor Statistics (Grouping by Donor)
-            donor_stats = filtered_df.groupby('Donor').agg(
-                Num_Schools=('UDISE', 'nunique'),
-                Num_Students=('Student Id', 'nunique'),
-                Num_Assessments=('Student Id', 'count'), # Total rows = total assessments
-                Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
-                Avg_Post_Score_Raw=('Post_Score', 'mean')
-            ).reset_index()
-            
-            # 2. Calculate percentages (These are FLOAT columns)
-            donor_stats['Avg Pre Score %'] = (donor_stats['Avg_Pre_Score_Raw'] / 5) * 100
-            donor_stats['Avg Post Score %'] = (donor_stats['Avg_Post_Score_Raw'] / 5) * 100
-            donor_stats['Improvement %'] = donor_stats['Avg Post Score %'] - donor_stats['Avg Pre Score %']
-            
-            # 3. Format columns for display - CREATE A COPY FOR DISPLAY
-            display_donor_stats = donor_stats.copy()
-            # Note: Keeping the donor table sorted descending by Assessments (or by Donor name if needed)
-            display_donor_stats = display_donor_stats.sort_values('Num_Assessments', ascending=False)
-            
-            # Select and rename final columns
-            display_donor_stats = display_donor_stats[[
-                'Donor', 
-                'Num_Schools', 
-                'Num_Students', 
-                'Num_Assessments', 
-                'Avg Pre Score %', 
-                'Avg Post Score %', 
-                'Improvement %'
-            ]]
-            
-            display_donor_stats.columns = [
-                'Donor', 
-                'Schools', 
-                'Students', 
-                'Assessments', 
-                'Avg Pre %', 
-                'Avg Post %', 
-                'Improvement %'
-            ]
-            
-            # Apply string formatting (AFTER all calculations/renaming on the DISPLAY COPY)
-            display_donor_stats['Avg Pre %'] = display_donor_stats['Avg Pre %'].apply(lambda x: f"{x:.1f}%")
-            display_donor_stats['Avg Post %'] = display_donor_stats['Avg Post %'].apply(lambda x: f"{x:.1f}%")
-            display_donor_stats['Improvement %'] = display_donor_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
-            
-            st.subheader("Detailed Donor Analysis Table (All Donors)")
-            st.dataframe(display_donor_stats, hide_index=True, use_container_width=True)
-            st.markdown("---")
-            
-            # --- LOGIC FOR INDIVIDUAL DONOR (Specific Metrics) ---
+        # --- LOGIC FOR ALL DONORS (Summary Table) ---
+        
+        # 1. Calculate Donor Statistics (Grouping by Donor)
+        donor_stats = filtered_df.groupby('Donor').agg(
+            Num_Schools=('UDISE', 'nunique'),
+            Num_Students=('Student Id', 'nunique'),
+            Num_Assessments=('Student Id', 'count'), # Total rows = total assessments
+            Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
+            Avg_Post_Score_Raw=('Post_Score', 'mean')
+        ).reset_index()
+        
+        # 2. Calculate percentages (These are FLOAT columns)
+        donor_stats['Avg Pre Score %'] = (donor_stats['Avg_Pre_Score_Raw'] / 5) * 100
+        donor_stats['Avg Post Score %'] = (donor_stats['Avg_Post_Score_Raw'] / 5) * 100
+        donor_stats['Improvement %'] = donor_stats['Avg Post Score %'] - donor_stats['Avg Pre Score %']
+        
+        # 3. Format columns for display - CREATE A COPY FOR DISPLAY
+        display_donor_stats = donor_stats.copy()
+        # Note: Keeping the donor table sorted descending by Assessments (or by Donor name if needed)
+        display_donor_stats = display_donor_stats.sort_values('Num_Assessments', ascending=False)
+        
+        # Select and rename final columns
+        display_donor_stats = display_donor_stats[[
+            'Donor', 
+            'Num_Schools', 
+            'Num_Students', 
+            'Num_Assessments', 
+            'Avg Pre Score %', 
+            'Avg Post Score %', 
+            'Improvement %'
+        ]]
+        
+        display_donor_stats.columns = [
+            'Donor', 
+            'Schools', 
+            'Students', 
+            'Assessments', 
+            'Avg Pre %', 
+            'Avg Post %', 
+            'Improvement %'
+        ]
+        
+        # Apply string formatting (AFTER all calculations/renaming on the DISPLAY COPY)
+        display_donor_stats['Avg Pre %'] = display_donor_stats['Avg Pre %'].apply(lambda x: f"{x:.1f}%")
+        display_donor_stats['Avg Post %'] = display_donor_stats['Avg Post %'].apply(lambda x: f"{x:.1f}%")
+        display_donor_stats['Improvement %'] = display_donor_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
+        
+        st.subheader("Detailed Donor Analysis Table (All Donors)")
+        st.dataframe(display_donor_stats, hide_index=True, use_container_width=True)
+        st.markdown("---")
+        
+        # --- LOGIC FOR INDIVIDUAL DONOR (Specific Metrics) ---
 
+        if not donor_filtered_df.empty:
             
-            # Calculate Metrics for the Selected Donor/All (uses the now correctly filtered donor_filtered_df)
+            # Calculate Metrics for the Selected Donor/All
             donor_specific_stats = {
                 'Avg Pre Score %': (donor_filtered_df['Pre_Score'].mean() / 5) * 100,
                 'Avg Post Score %': (donor_filtered_df['Post_Score'].mean() / 5) * 100,
@@ -1401,8 +1395,6 @@ if uploaded_file is not None:
             st.markdown("---")
             
             # Breakdown by Region for the Selected Donor
-            # NOTE: This calculation uses the donor_filtered_df which is now guaranteed 
-            # to contain ALL regions for the selected donor (if not 'All Donors' mode).
             st.subheader(f"Region Breakdown for {selected_donor}")
             
             donor_region_stats = donor_filtered_df.groupby('Region').agg(
@@ -1460,6 +1452,9 @@ if uploaded_file is not None:
                 "text/csv"
             )
 
+        else:
+            # If donor_filtered_df is empty, show the total summary and inform the user
+            st.info("No records match the current filter selection.")
             
     # ===== TAB 8: SUBJECT ANALYSIS (NEW/MODIFIED) =====
     with tab8:
