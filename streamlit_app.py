@@ -1293,7 +1293,7 @@ if uploaded_file is not None:
             st.warning("Please ensure your Excel file contains 'School Name' and 'UDISE' columns.")
             school_stats = None # Set to None if error occurs to handle download later
 
-    # ===== TAB 7: DONOR ANALYSIS (FIXED STRING FORMATTING) =====
+    # ===== TAB 7: DONOR ANALYSIS (FIXED FORCED ACCESS TO FULL DATA FOR REGION BREAKDOWN) =====
     with tab7:
         st.header("Donor Performance Analysis")
         
@@ -1302,22 +1302,15 @@ if uploaded_file is not None:
         all_donors = ['All Donors'] + sorted(filtered_df['Donor'].unique().tolist())
         selected_donor = st.selectbox("Select Donor for Individual Analysis", all_donors)
         
-        # Apply the donor filter to create donor_filtered_df
-        # FIX APPLIED HERE: If a specific donor is selected, use the master 'df' (cleaned data before global
-        # Region/Program/Grade filters) to ensure all regions for that donor are included.
+        # Determine the DataFrame to use for the detailed analysis section.
         if selected_donor != 'All Donors':
-            # 'df' is the full cleaned data from the main application block.
-            if 'df' in locals():
-                # Use the master cleaned DataFrame 'df' to bypass the global Region/Program/Grade filters
-                donor_filtered_df = df[df['Donor'] == selected_donor].copy() 
-            else:
-                # Fallback (should not happen in this code structure)
-                donor_filtered_df = filtered_df[filtered_df['Donor'] == selected_donor].copy()
-                st.warning("Could not access master data ('df'). Global Region/Program/Grade filters may apply.")
-                
+            # *** FIX APPLIED HERE: USE MASTER 'df' ***
+            # Use the original, full DataFrame 'df' for individual donor analysis 
+            # to ensure all regions are included, regardless of sidebar filters.
+            donor_filtered_df = df[df['Donor'] == selected_donor].copy() 
             st.subheader(f"Metrics for Donor: **{selected_donor}**")
         else:
-            # If 'All Donors' is selected, respect the global sidebar filters
+            # If 'All Donors' is selected, respect the global sidebar filters (filtered_df)
             donor_filtered_df = filtered_df.copy()
             st.subheader("Metrics for All Donors (Summary View)")
 
@@ -1328,6 +1321,7 @@ if uploaded_file is not None:
         else:
         
             # --- LOGIC FOR ALL DONORS (Summary Table) ---
+            # NOTE: This table *must* respect the sidebar filters, so it uses filtered_df
             
             # 1. Calculate Donor Statistics (Grouping by Donor)
             donor_stats = filtered_df.groupby('Donor').agg(
@@ -1381,7 +1375,7 @@ if uploaded_file is not None:
             # --- LOGIC FOR INDIVIDUAL DONOR (Specific Metrics) ---
 
             
-            # Calculate Metrics for the Selected Donor/All
+            # Calculate Metrics for the Selected Donor/All (uses the now correctly filtered donor_filtered_df)
             donor_specific_stats = {
                 'Avg Pre Score %': (donor_filtered_df['Pre_Score'].mean() / 5) * 100,
                 'Avg Post Score %': (donor_filtered_df['Post_Score'].mean() / 5) * 100,
@@ -1407,6 +1401,8 @@ if uploaded_file is not None:
             st.markdown("---")
             
             # Breakdown by Region for the Selected Donor
+            # NOTE: This calculation uses the donor_filtered_df which is now guaranteed 
+            # to contain ALL regions for the selected donor (if not 'All Donors' mode).
             st.subheader(f"Region Breakdown for {selected_donor}")
             
             donor_region_stats = donor_filtered_df.groupby('Region').agg(
