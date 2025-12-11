@@ -708,7 +708,7 @@ if uploaded_file is not None:
             st.dataframe(top_perf, hide_index=True, use_container_width=True)
         
         with col2:
-            st.subheader("📈 Best Adaptation (Improvement)")
+            st.subheader("📈 Best Improvement")
             best_adapt = instructor_stats_for_table.nlargest(10, 'Improvement')[['Instructor Name', 'Improvement', 'Student Id']]
             best_adapt.columns = ['Instructor', 'Improvement %', 'Students']
             best_adapt['Improvement %'] = best_adapt['Improvement %'].apply(lambda x: f"{x:.1f}%")
