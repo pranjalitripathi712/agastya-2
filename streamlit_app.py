@@ -623,7 +623,7 @@ if uploaded_file is not None:
             most_improved['Improvement'] = most_improved['Improvement'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(most_improved, hide_index=True, use_container_width=True)
     
-    # ===== TAB 2: INSTRUCTOR ANALYSIS (UNCHANGED) =====
+    # ===== TAB 2: INSTRUCTOR ANALYSIS (FIXED TOTAL INSTRUCTORS COUNT) =====
     with tab2:
         st.header("Instructor-wise Performance Analysis")
         
@@ -713,12 +713,14 @@ if uploaded_file is not None:
             filtered_df['Date_Post'].astype(str) # Added Date_Post
         )
         
-        # Calculate number of assessments (using the session key) per instructor
-        all_instructors = filtered_df.groupby(['Instructor Name', 'Instructor Login Id']).agg({
-            'Assessment_Session_Key': 'nunique', # This correctly counts distinct sessions
-            'Student Id': 'count',
-            'Region': lambda x: x.mode()[0] if not x.mode().empty else x.iloc[0]  # Most common region
-        }).reset_index()
+        # FIX APPLIED: Group primarily by Instructor Name and use the mode for Login Id/Region
+        # This prevents duplicate instructor entries if there is a single character difference in Login ID
+        all_instructors = filtered_df.groupby(['Instructor Name']).agg(
+            Instructor_Login_Id=('Instructor Login Id', lambda x: x.mode()[0] if not x.mode().empty else x.iloc[0]),
+            Assessment_Session_Key=('Assessment_Session_Key', 'nunique'), # This correctly counts distinct sessions
+            Student_Id=('Student Id', 'count'),
+            Region=('Region', lambda x: x.mode()[0] if not x.mode().empty else x.iloc[0])  # Most common region
+        ).reset_index()
         
         all_instructors.columns = ['Instructor Name', 'Instructor Login Id', 'Number of Assessments', 'Total Students', 'Primary Region']
         all_instructors = all_instructors.sort_values('Number of Assessments', ascending=False)
@@ -734,10 +736,14 @@ if uploaded_file is not None:
         else:
             filtered_instructors = all_instructors
         
+        # FIX APPLIED: Calculate unique instructor count directly and use it for all metrics.
+        total_unique_instructors = filtered_df['Instructor Name'].nunique()
+        
         # Display summary metrics
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Instructors", len(all_instructors))
+            # FIX: Use the explicit unique count
+            st.metric("Total Instructors", total_unique_instructors) 
         with col2:
             st.metric("Avg Assessments per Instructor", f"{all_instructors['Number of Assessments'].mean():.1f}")
         with col3:
@@ -799,7 +805,8 @@ if uploaded_file is not None:
         with col1:
             st.dataframe(instructors_per_region, hide_index=True, use_container_width=True)
         with col2:
-            st.metric("Total Unique Instructors", filtered_df['Instructor Name'].nunique())
+            # FIX: Use the explicit unique count
+            st.metric("Total Unique Instructors", total_unique_instructors) 
             st.metric("Average per Region", f"{instructors_per_region['Number of Instructors'].mean():.1f}")
     
     # ===== TAB 3: GRADE ANALYSIS (FIXED STRING FORMATTING & SORTING) =====
