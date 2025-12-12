@@ -90,6 +90,22 @@ def clean_and_process_data(df):
         df['Donor'] = df['Donor'].astype(str).str.upper()
     # -------------------------------------------------------------------------
     
+    # ===== STEP 6: STANDARDIZE SUBJECT NAMES (NEW FIX FOR CASE-SENSITIVITY AND VARIATIONS) =====
+    if 'Subject' in df.columns:
+        # Convert Subject column to string and then uppercase for initial standardization
+        df['Subject'] = df['Subject'].astype(str).str.upper()
+        
+        # Apply explicit mapping to handle variations and consolidate
+        df['Subject'] = df['Subject'].replace({
+            'SCIENCE': 'SCIENCE',
+            'MATH': 'MATH',
+            'SCIENCE ': 'SCIENCE', # Catch trailing spaces
+            'MATH ': 'MATH'
+            # This step is mainly redundant after .str.upper() but ensures explicit consolidation.
+        }, regex=False)
+        
+    # ------------------------------------------------------------------------------------------
+    
     return df, initial_count, cleaned_count
 
 # ===== TAB 8: SUBJECT ANALYSIS (UNCHANGED) =====
@@ -1542,6 +1558,7 @@ else:
     2. ✅ Scores are calculated automatically
     3. ✅ Program types are standardized
     4. ✅ **Donor names are standardized to UPPERCASE (Fix for 'Adobe' vs 'ADOBE')**
-    5. ✅ Interactive dashboard is generated
-    6. ✅ Download options for all analyses
+    5. ✅ **Subject names are standardized (e.g., 'Science' and 'SCIENCE' become 'SCIENCE')**
+    6. ✅ Interactive dashboard is generated
+    7. ✅ Download options for all analyses
     """)
