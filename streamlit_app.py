@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 # Set page configuration
 st.set_page_config(page_title="Student Assessment Dashboard", layout="wide", page_icon="📊")
 
-# ===== DATA CLEANING FUNCTIONS (MODIFIED FOR DONOR STANDARDIZATION) =====
+# ===== DATA CLEANING FUNCTIONS (MODIFIED FOR DONOR AND DATE STANDARDIZATION) =====
 def clean_and_process_data(df):
     """
     Clean and process student assessment data
@@ -44,9 +44,22 @@ def clean_and_process_data(df):
     # Remove rows that meet any of the conditions
     df = df[~(remove_condition_1 | remove_condition_2 | remove_condition_3)]
     
+    # ===== STEP 2: DATE FORMATTING FIX (EXPLICITLY USING USER-SPECIFIED FORMAT) =====
+    if 'Date_Post' in df.columns:
+        # User specified format is 'dd_mm_yyyy', which is '%d_%m_%Y' for pandas
+        try:
+            df['Date_Post'] = pd.to_datetime(df['Date_Post'], format='%d_%m_%Y', errors='coerce')
+            # Remove rows where date parsing failed (Date_Post is NaT)
+            df = df[df['Date_Post'].notna()]
+        except Exception:
+            # Fallback to general parsing if the user's specific format fails, but issue a warning later.
+            df['Date_Post'] = pd.to_datetime(df['Date_Post'], errors='coerce')
+            df = df[df['Date_Post'].notna()]
+            st.warning("⚠️ Could not parse 'Date_Post' with the format 'dd_mm_yyyy'. Falling back to automatic date parsing, which might affect date consistency.")
+    
     cleaned_count = len(df)
     
-    # ===== STEP 2: CALCULATE SCORES =====
+    # ===== STEP 3: CALCULATE SCORES =====
     # Define answer columns
     pre_answers = ['Q1 Answer', 'Q2 Answer', 'Q3 Answer', 'Q4 Answer', 'Q5 Answer']
     post_answers = ['Q1_Answer_Post', 'Q2_Answer_Post', 'Q3_Answer_Post', 'Q4_Answer_Post', 'Q5_Answer_Post']
@@ -61,7 +74,7 @@ def clean_and_process_data(df):
     for q, ans in zip(post_questions, post_answers):
         df['Post_Score'] += (df[q] == df[ans]).astype(int)
     
-    # ===== STEP 3: STANDARDIZE PROGRAM TYPES =====
+    # ===== STEP 4: STANDARDIZE PROGRAM TYPES =====
     # Create a mapping for program types
     # SCB, SCC, SCM, SCP are combined into PCMB
     program_type_mapping = {
@@ -77,34 +90,26 @@ def clean_and_process_data(df):
     # Apply the mapping
     df['Program Type'] = df['Program Type'].replace(program_type_mapping)
     
-    # ===== STEP 4: CREATE PARENT CLASS =====
+    # ===== STEP 5: CREATE PARENT CLASS =====
     # Extract parent class from Class column (e.g., "6-A" -> "6", "7-B" -> "7")
     df['Parent_Class'] = df['Class'].astype(str).str.extract(r'^(\d+)')[0]
     
     # Filter for grades 6-10 only
     df = df[df['Parent_Class'].isin(['6', '7', '8', '9', '10'])]
 
-    # ===== STEP 5: STANDARDIZE DONOR NAMES (NEW FIX FOR CASE-SENSITIVITY) =====
+    # ===== STEP 6: STANDARDIZE DONOR NAMES =====
     if 'Donor' in df.columns:
-        # Convert all donor names to uppercase to treat 'Adobe', 'ADOBE', 'adobe' as a single entity.
+        # Convert all donor names to uppercase to treat case variations as one entity
         df['Donor'] = df['Donor'].astype(str).str.upper()
-    # -------------------------------------------------------------------------
     
-    # ===== STEP 6: STANDARDIZE SUBJECT NAMES (NEW FIX FOR CASE-SENSITIVITY AND VARIATIONS) =====
+    # ===== STEP 7: STANDARDIZE SUBJECT NAMES =====
     if 'Subject' in df.columns:
-        # Convert Subject column to string and then uppercase for initial standardization
         df['Subject'] = df['Subject'].astype(str).str.upper()
-        
-        # Apply explicit mapping to handle variations and consolidate
         df['Subject'] = df['Subject'].replace({
-            'SCIENCE': 'SCIENCE',
-            'MATH': 'MATH',
-            'SCIENCE ': 'SCIENCE', # Catch trailing spaces
+            'SCIENCE ': 'SCIENCE', 
             'MATH ': 'MATH'
-            # This step is mainly redundant after .str.upper() but ensures explicit consolidation.
         }, regex=False)
         
-    # ------------------------------------------------------------------------------------------
     
     return df, initial_count, cleaned_count
 
@@ -401,7 +406,7 @@ def tab8_subject_analysis(df):
     
     return subject_stats # Return for use in the main download section
 
-# ===== TAB 9: MONTH ANALYSIS (NEW FUNCTION) =====
+# ===== TAB 9: MONTH ANALYSIS (FIXED DATE HANDLING) =====
 def tab9_month_analysis(filtered_df):
     """
     Generates monthly analysis graphs:
@@ -422,23 +427,23 @@ def tab9_month_analysis(filtered_df):
 
     # 1. Prepare data for monthly assessment count and scores
     monthly_data = filtered_df.copy()
-
-    # Ensure Date_Post is datetime and create YearMonth column
-    try:
+    
+    # Check if 'Date_Post' is already datetime (should be from clean_and_process_data).
+    # Coerce to ensure it's handled as datetime for dt operations, dropping NaT if any.
+    if not pd.api.types.is_datetime64_any_dtype(monthly_data['Date_Post']):
         monthly_data['Date_Post'] = pd.to_datetime(monthly_data['Date_Post'], errors='coerce')
-        monthly_data = monthly_data[monthly_data['Date_Post'].notna()]
-    except Exception as e:
-        st.error(f"Error converting 'Date_Post' to datetime: {e}")
-        return
+
+    monthly_data = monthly_data[monthly_data['Date_Post'].notna()]
 
     if monthly_data.empty:
         st.info("No valid assessment dates found in the data.")
         return
 
+    # Create the YearMonth column for grouping and plotting
+    # Format: YYYY-MM
     monthly_data['YearMonth'] = monthly_data['Date_Post'].dt.strftime('%Y-%m')
 
-    # Create the unique assessment key (as per unique assessment definition in Key Metrics section)
-    # The key uses Content Id, School, Class, and Date_Post
+    # Create the unique assessment key
     monthly_data['Assessment_Session_Key'] = (
         monthly_data['Content Id'].astype(str) + '_' + 
         monthly_data['Class'].astype(str) + '_' + 
@@ -463,7 +468,7 @@ def tab9_month_analysis(filtered_df):
     # 1. Bar Graph: Number of assessments per month
     st.subheader("1. Number of Unique Assessments per Month")
     
-    # Sort chronologically for the bar chart
+    # Sort chronologically (YearMonth string 'YYYY-MM' sorts correctly)
     month_stats_bar = month_stats.sort_values('YearMonth', ascending=True)
 
     fig_bar = go.Figure()
@@ -484,7 +489,8 @@ def tab9_month_analysis(filtered_df):
         paper_bgcolor='#1e1e1e',
         font=dict(color='white'),
         yaxis=dict(gridcolor='#404040', rangemode='tozero'),
-        xaxis=dict(type='category', gridcolor='#404040', tickangle=-45)
+        # Crucially, type='category' ensures only months present in the data are shown
+        xaxis=dict(type='category', gridcolor='#404040', tickangle=-45) 
     )
     
     st.plotly_chart(fig_bar, use_container_width=True)
@@ -533,7 +539,8 @@ def tab9_month_analysis(filtered_df):
         paper_bgcolor='#1e1e1e',
         font=dict(color='white'),
         yaxis=dict(range=[0, 100], gridcolor='#404040'),
-        xaxis=dict(type='category', gridcolor='#404040', tickangle=-45) # Force category type
+        # Crucially, type='category' ensures only months present in the data are shown
+        xaxis=dict(type='category', gridcolor='#404040', tickangle=-45) 
     )
     
     st.plotly_chart(fig_line, use_container_width=True)
@@ -1221,7 +1228,7 @@ if uploaded_file is not None:
 
         # Iterate over selected regions and add traces for each
         for region in selected_regions_for_prog:
-            region_data = program_region_stats[program_region_stats['Region'] == region]
+            region_data = program_region_stats[program_region_stats['Program Type'] == region]
             # Sort by Program Type for consistent X-axis order
             region_data = region_data.sort_values('Program Type', ascending=True)
 
@@ -1702,7 +1709,7 @@ else:
     st.info("⬆️ Please upload your student assessment data file (.xlsx or .xls) to begin the analysis.")
     st.markdown("""
     **Required Columns in your Data:**
-    * `Date_Post` - Assessment Date (Required for tracking unique tests)
+    * `Date_Post` - Assessment Date (**Must be in dd_mm_yyyy format**)
     * `Donor` - The donor/partner associated with the record
     * `Subject` - The subject name
     * `Region` - Geographic region
@@ -1712,16 +1719,13 @@ else:
     * `Class` - Class with section (e.g., 6-A, 7-B)
     * `Program Type` - Program type code
     * `Content Id` - Assessment/Content Identifier
-    * `Q1`, `Q2`, `Q3`, `Q4`, `Q5` - Student responses (Pre-session)
-    * `Q1 Answer`, `Q2 Answer`, `Q3 Answer`, `Q4 Answer`, `Q5 Answer` - Correct answers (Pre-session)
-    * `Q1_Post`, `Q2_Post`, `Q3_Post`, `Q4_Post`, `Q5_Post` - Student responses (Post-session)
-    * `Q1_Answer_Post`, `Q2_Answer_Post`, `Q3_Answer_Post`, `Q4_Answer_Post`, `Q5_Answer_Post` - Correct answers (Post-session)
+    * `Q1` to `Q5` and corresponding Answers (Pre/Post)
     ---
     **What happens when you upload:**
     1. ✅ Data is cleaned (incomplete records removed)
-    2. ✅ Pre and Post scores are calculated (out of 5)
-    3. ✅ Program Types and Donor names are standardized
-    4. ✅ Grade (Parent Class) is extracted
+    2. ✅ Date format `dd_mm_yyyy` is explicitly used for parsing.
+    3. ✅ Pre and Post scores are calculated (out of 5)
+    4. ✅ Program Types and Donor names are standardized
     5. ✅ Filters are applied and key metrics are displayed
-    6. ✅ Detailed analyses are available in separate tabs (Region, Instructor, Grade, Program, Student, School, Donor, Subject, **Month**)
+    6. ✅ Detailed analyses are available in separate tabs
     """)
