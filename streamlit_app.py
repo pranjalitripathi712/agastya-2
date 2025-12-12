@@ -401,6 +401,165 @@ def tab8_subject_analysis(df):
     
     return subject_stats # Return for use in the main download section
 
+# ===== TAB 9: MONTH ANALYSIS (NEW FUNCTION) =====
+def tab9_month_analysis(filtered_df):
+    """
+    Generates monthly analysis graphs:
+    1. Bar chart of unique assessments per month.
+    2. Line chart of Pre vs Post scores % per month (sorted by Pre Score %).
+    """
+    st.header("Monthly Assessment Analysis")
+
+    if filtered_df.empty:
+        st.info("No data to display after applying filters.")
+        return
+
+    # Check for required columns
+    required_cols = ['Date_Post', 'Content Id', 'School Name', 'Class', 'Pre_Score', 'Post_Score']
+    if not all(col in filtered_df.columns for col in required_cols):
+        st.error(f"❌ Missing required columns: {', '.join([col for col in required_cols if col not in filtered_df.columns])}.")
+        return
+
+    # 1. Prepare data for monthly assessment count and scores
+    monthly_data = filtered_df.copy()
+
+    # Ensure Date_Post is datetime and create YearMonth column
+    try:
+        monthly_data['Date_Post'] = pd.to_datetime(monthly_data['Date_Post'], errors='coerce')
+        monthly_data = monthly_data[monthly_data['Date_Post'].notna()]
+    except Exception as e:
+        st.error(f"Error converting 'Date_Post' to datetime: {e}")
+        return
+
+    if monthly_data.empty:
+        st.info("No valid assessment dates found in the data.")
+        return
+
+    monthly_data['YearMonth'] = monthly_data['Date_Post'].dt.strftime('%Y-%m')
+
+    # Create the unique assessment key (as per unique assessment definition in Key Metrics section)
+    # The key uses Content Id, School, Class, and Date_Post
+    monthly_data['Assessment_Session_Key'] = (
+        monthly_data['Content Id'].astype(str) + '_' + 
+        monthly_data['Class'].astype(str) + '_' + 
+        monthly_data['School Name'].fillna('NA').astype(str) + '_' + 
+        monthly_data['Date_Post'].dt.date.astype(str) # Use date part only to group by assessment day
+    )
+
+    # Calculate unique assessment sessions and average scores per month
+    month_stats = monthly_data.groupby('YearMonth').agg(
+        Num_Assessments=('Assessment_Session_Key', 'nunique'), # Unique assessments
+        Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
+        Avg_Post_Score_Raw=('Post_Score', 'mean')
+    ).reset_index()
+
+    # Calculate percentages
+    month_stats['Avg Pre Score %'] = (month_stats['Avg_Pre_Score_Raw'] / 5) * 100
+    month_stats['Avg Post Score %'] = (month_stats['Avg_Post_Score_Raw'] / 5) * 100
+    month_stats['Improvement %'] = month_stats['Avg Post Score %'] - month_stats['Avg Pre Score %']
+    
+    st.markdown("---")
+    
+    # 1. Bar Graph: Number of assessments per month
+    st.subheader("1. Number of Unique Assessments per Month")
+    
+    # Sort chronologically for the bar chart
+    month_stats_bar = month_stats.sort_values('YearMonth', ascending=True)
+
+    fig_bar = go.Figure()
+    fig_bar.add_trace(go.Bar(
+        x=month_stats_bar['YearMonth'],
+        y=month_stats_bar['Num_Assessments'],
+        marker_color='#5d6d7e',
+        text=month_stats_bar['Num_Assessments'],
+        textposition='outside'
+    ))
+
+    fig_bar.update_layout(
+        title='Total Unique Assessment Sessions Conducted by Month',
+        xaxis_title='Month (Year-Month)',
+        yaxis_title='Number of Unique Assessments',
+        height=500,
+        plot_bgcolor='#2b2b2b',
+        paper_bgcolor='#1e1e1e',
+        font=dict(color='white'),
+        yaxis=dict(gridcolor='#404040', rangemode='tozero'),
+        xaxis=dict(type='category', gridcolor='#404040', tickangle=-45)
+    )
+    
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.markdown("---")
+    
+    # 2. Line Graph: Pre vs Post test score % per month (in ascending order of pre-test scores)
+    st.subheader("2. Pre vs Post Score % per Month (Sorted by Pre-Score %)")
+    
+    # Sort by Pre Score % for the line chart
+    month_stats_line = month_stats.sort_values('Avg Pre Score %', ascending=True)
+
+    fig_line = go.Figure()
+    
+    fig_line.add_trace(go.Scatter(
+        x=month_stats_line['YearMonth'],
+        y=month_stats_line['Avg Pre Score %'],
+        mode='lines+markers+text',
+        name='Pre-Session Average',
+        line=dict(color='#8e44ad', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in month_stats_line['Avg Pre Score %']],
+        textposition='top center',
+        textfont=dict(size=12, color='#8e44ad')
+    ))
+    
+    fig_line.add_trace(go.Scatter(
+        x=month_stats_line['YearMonth'],
+        y=month_stats_line['Avg Post Score %'],
+        mode='lines+markers+text',
+        name='Post-Session Average',
+        line=dict(color='#3498db', width=3),
+        marker=dict(size=10),
+        text=[f"{val:.0f}%" for val in month_stats_line['Avg Post Score %']],
+        textposition='top center',
+        textfont=dict(size=12, color='#3498db')
+    ))
+
+    fig_line.update_layout(
+        title='Monthly Pre and Post Assessment Scores (Ascending by Pre Score)',
+        xaxis_title='Month (Year-Month)',
+        yaxis_title='Average Score (%)',
+        hovermode='x unified',
+        height=500,
+        plot_bgcolor='#2b2b2b',
+        paper_bgcolor='#1e1e1e',
+        font=dict(color='white'),
+        yaxis=dict(range=[0, 100], gridcolor='#404040'),
+        xaxis=dict(type='category', gridcolor='#404040', tickangle=-45) # Force category type
+    )
+    
+    st.plotly_chart(fig_line, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("📋 Monthly Summary Table")
+    
+    # Sort the table chronologically
+    display_month_stats = month_stats.sort_values('YearMonth', ascending=True).copy()
+    display_month_stats['Avg Pre Score %'] = display_month_stats['Avg Pre Score %'].apply(lambda x: f"{x:.1f}%")
+    display_month_stats['Avg Post Score %'] = display_month_stats['Avg Post Score %'].apply(lambda x: f"{x:.1f}%")
+    display_month_stats['Improvement %'] = display_month_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
+
+    display_month_stats.columns = [
+        'Month', 
+        'Unique Assessments', 
+        'Avg Pre Score (Raw)', 
+        'Avg Post Score (Raw)', 
+        'Avg Pre %', 
+        'Avg Post %', 
+        'Improvement %'
+    ]
+
+    st.dataframe(display_month_stats, hide_index=True, use_container_width=True)
+
+
 # ===== MAIN APPLICATION (MODIFIED FILTERS) =====
 
 # Title and description
@@ -555,9 +714,9 @@ if uploaded_file is not None:
     with col6:
         st.metric("Min Tests/Student", f"{min_tests}")
     
-    # ===== TABS FOR DIFFERENT ANALYSES (UNCHANGED) =====
+    # ===== TABS FOR DIFFERENT ANALYSES (MODIFIED TO INCLUDE TAB 9) =====
     st.markdown("---")
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📍 Region Analysis", "👤 Instructor Analysis", "📚 Grade Analysis", "📊 Program Type Analysis", "👥 Student Participation", "🏫 School Analysis", "💰 Donor Analysis", "🔬 Subject Analysis"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["📍 Region Analysis", "👤 Instructor Analysis", "📚 Grade Analysis", "📊 Program Type Analysis", "👥 Student Participation", "🏫 School Analysis", "💰 Donor Analysis", "🔬 Subject Analysis", "🗓️ Month Analysis"])
     
     # Placeholder for subject_stats for download section
     subject_stats = None
@@ -700,93 +859,95 @@ if uploaded_file is not None:
         
         # Top performing and most improved regions
         col1, col2 = st.columns(2)
-        
         with col1:
             st.subheader("🏆 Top Scoring Regions (Post-Session)")
             top_scoring = region_stats.nlargest(5, 'Post_Score_Pct')[['Region', 'Post_Score_Pct']]
             top_scoring['Post_Score_Pct'] = top_scoring['Post_Score_Pct'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(top_scoring, hide_index=True, use_container_width=True)
-        
         with col2:
             st.subheader("📈 Most Improved Regions (Adaptation)")
             most_improved = region_stats.nlargest(5, 'Improvement')[['Region', 'Improvement']]
             most_improved['Improvement'] = most_improved['Improvement'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(most_improved, hide_index=True, use_container_width=True)
-    
-    # ===== TAB 2: INSTRUCTOR ANALYSIS (UNCHANGED) =====
+
+    # ===== TAB 2: INSTRUCTOR ANALYSIS (Unchanged) =====
     with tab2:
         st.header("Instructor-wise Performance Analysis")
         
-        instructor_stats = filtered_df.groupby('Instructor Name').agg({
-            'Pre_Score': 'mean',
-            'Post_Score': 'mean',
-            'Student Id': 'count'
-        }).reset_index()
-        
-        instructor_stats['Pre_Score_Pct'] = (instructor_stats['Pre_Score'] / 5) * 100
-        instructor_stats['Post_Score_Pct'] = (instructor_stats['Post_Score'] / 5) * 100
-        instructor_stats['Improvement'] = instructor_stats['Post_Score_Pct'] - instructor_stats['Pre_Score_Pct']
-        
-        # The general stats used for tables are sorted descending
-        instructor_stats_for_table = instructor_stats.sort_values('Post_Score_Pct', ascending=False)
-        
-        # Show top N instructors
-        top_n = st.slider("Number of instructors to display", 5, 20, 10)
-        
-        # Get top N performers, then sort them ascending by PRE for the plot
-        top_instructors = instructor_stats_for_table.nlargest(top_n, 'Post_Score_Pct').sort_values('Pre_Score_Pct', ascending=True)
+        # 1. Performance Comparison Chart
+        st.subheader("📈 Performance Comparison (Pre vs Post)")
 
-        fig = go.Figure()
+        # Prepare instructor data for visualization
+        instructor_stats = filtered_df.groupby('Instructor Name').agg(
+            Num_Students=('Student Id', 'count'),
+            Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
+            Avg_Post_Score_Raw=('Post_Score', 'mean')
+        ).reset_index()
+
+        instructor_stats['Avg Pre Score %'] = (instructor_stats['Avg_Pre_Score_Raw'] / 5) * 100
+        instructor_stats['Avg Post Score %'] = (instructor_stats['Avg_Post_Score_Raw'] / 5) * 100
+        instructor_stats['Improvement'] = instructor_stats['Avg Post Score %'] - instructor_stats['Avg Pre Score %']
         
-        fig.add_trace(go.Scatter(
-            x=top_instructors['Instructor Name'],
-            y=top_instructors['Pre_Score_Pct'],
-            mode='lines+markers+text',
-            name='Pre-Session',
-            line=dict(color='#9b59b6', width=3),
-            marker=dict(size=10),
-            text=[f"{val:.0f}%" for val in top_instructors['Pre_Score_Pct']],
-            textposition='top center'
-        ))
+        # Filter for instructors with at least 50 assessments for meaningful visualization
+        MIN_ASSESSMENTS_FOR_VIZ = 50
+        viz_data = instructor_stats[instructor_stats['Num_Students'] >= MIN_ASSESSMENTS_FOR_VIZ].copy()
         
-        fig.add_trace(go.Scatter(
-            x=top_instructors['Instructor Name'],
-            y=top_instructors['Post_Score_Pct'],
-            mode='lines+markers+text',
-            name='Post-Session',
-            line=dict(color='#f39c12', width=3),
-            marker=dict(size=10),
-            text=[f"{val:.0f}%" for val in top_instructors['Post_Score_Pct']],
-            textposition='top center'
-        ))
+        # Sort in ascending order of PRE Score Pct
+        viz_data = viz_data.sort_values('Avg Pre Score %', ascending=True)
+
+        if not viz_data.empty:
+            fig_inst = go.Figure()
+            
+            fig_inst.add_trace(go.Scatter(
+                x=viz_data['Instructor Name'],
+                y=viz_data['Avg Pre Score %'],
+                mode='lines+markers',
+                name='Pre-Session Average',
+                line=dict(color='#8e44ad', width=2),
+                marker=dict(size=8)
+            ))
+            
+            fig_inst.add_trace(go.Scatter(
+                x=viz_data['Instructor Name'],
+                y=viz_data['Avg Post Score %'],
+                mode='lines+markers',
+                name='Post-Session Average',
+                line=dict(color='#f39c12', width=2),
+                marker=dict(size=8)
+            ))
+            
+            fig_inst.update_layout(
+                title=f'Instructor Performance Comparison ({len(viz_data)} Instructors with ≥{MIN_ASSESSMENTS_FOR_VIZ} Assessments)',
+                xaxis_title='Instructor Name',
+                yaxis_title='Average Score (%)',
+                hovermode='x unified',
+                height=500,
+                plot_bgcolor='#2b2b2b',
+                paper_bgcolor='#1e1e1e',
+                font=dict(color='white'),
+                yaxis=dict(range=[0, 100], gridcolor='#404040'),
+                xaxis=dict(type='category', gridcolor='#404040', tickangle=-45)
+            )
+            
+            st.plotly_chart(fig_inst, use_container_width=True)
+            st.caption(f"Showing instructors with a minimum of {MIN_ASSESSMENTS_FOR_VIZ} assessments.")
+        else:
+             st.info(f"No instructors meet the minimum assessment threshold of {MIN_ASSESSMENTS_FOR_VIZ} for performance comparison visualization.")
         
-        fig.update_layout(
-            title=f'Top {top_n} Instructors by Post-Session Performance (Ascending by Pre Score)',
-            xaxis_title='Instructor',
-            yaxis_title='Average Score (%)',
-            height=500,
-            plot_bgcolor='#2b2b2b',
-            paper_bgcolor='#1e1e1e',
-            font=dict(color='white'),
-            yaxis=dict(range=[0, 100], gridcolor='#404040'),
-            xaxis=dict(tickangle=-45, gridcolor='#404040') # Category is default for names
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Instructor rankings (using the descending table stats)
+        # 2. Top/Best Tables
+        st.markdown("---")
+        instructor_stats_for_table = instructor_stats[instructor_stats['Num_Students'] >= MIN_ASSESSMENTS_FOR_VIZ].copy()
+
         col1, col2 = st.columns(2)
-        
         with col1:
-            st.subheader("🏆 Top Performing Instructors")
-            top_perf = instructor_stats_for_table.nlargest(10, 'Post_Score_Pct')[['Instructor Name', 'Post_Score_Pct', 'Student Id']]
+            st.subheader("🏆 Top Performing Instructors (Post-Session)")
+            top_perf = instructor_stats_for_table.nlargest(10, 'Avg Post Score %')[['Instructor Name', 'Avg Post Score %', 'Num_Students']]
             top_perf.columns = ['Instructor', 'Post Score %', 'Students']
             top_perf['Post Score %'] = top_perf['Post Score %'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(top_perf, hide_index=True, use_container_width=True)
-        
         with col2:
             st.subheader("📈 Best Adaptation (Improvement)")
-            best_adapt = instructor_stats_for_table.nlargest(10, 'Improvement')[['Instructor Name', 'Improvement', 'Student Id']]
+            best_adapt = instructor_stats_for_table.nlargest(10, 'Improvement')[['Instructor Name', 'Improvement', 'Num_Students']]
             best_adapt.columns = ['Instructor', 'Improvement %', 'Students']
             best_adapt['Improvement %'] = best_adapt['Improvement %'].apply(lambda x: f"{x:.1f}%")
             st.dataframe(best_adapt, hide_index=True, use_container_width=True)
@@ -799,7 +960,7 @@ if uploaded_file is not None:
         filtered_df['Assessment_Session_Key'] = (
             filtered_df['Content Id'].astype(str) + '_' + 
             filtered_df['Class'].astype(str) + '_' + 
-            filtered_df['School Name'].fillna('NA').astype(str) + '_' +
+            filtered_df['School Name'].fillna('NA').astype(str) + '_' + 
             filtered_df['Date_Post'].astype(str) # Added Date_Post
         )
         
@@ -808,19 +969,17 @@ if uploaded_file is not None:
         all_instructors = filtered_df.groupby(['Instructor Name']).agg(
             Instructor_Login_Id=('Instructor Login Id', lambda x: x.mode()[0] if not x.mode().empty else x.iloc[0]),
             Assessment_Session_Key=('Assessment_Session_Key', 'nunique'), # This correctly counts distinct sessions
-            Student_Id=('Student Id', 'count'),
+            Student_Id=('Student Id', 'count'), 
             Region=('Region', lambda x: x.mode()[0] if not x.mode().empty else x.iloc[0]) # Most common region
         ).reset_index()
 
         all_instructors.columns = ['Instructor Name', 'Login ID', 'Total Sessions', 'Total Assessments', 'Region']
         all_instructors = all_instructors.sort_values('Total Assessments', ascending=False)
-        
         st.dataframe(all_instructors, hide_index=True, use_container_width=True)
         
         # Total metrics
         total_unique_instructors = filtered_df['Instructor Name'].nunique()
         total_sessions = all_instructors['Total Sessions'].sum()
-        
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total Unique Instructors", total_unique_instructors)
@@ -828,7 +987,7 @@ if uploaded_file is not None:
             st.metric("Total Unique Assessment Sessions", total_sessions)
         with col3:
             st.metric("Total Assessments Conducted", all_instructors['Total Assessments'].sum())
-
+        
         # Download button
         instructor_csv = all_instructors.to_csv(index=False)
         st.download_button(
@@ -841,53 +1000,46 @@ if uploaded_file is not None:
         # Instructors per Region
         st.markdown("---")
         st.subheader("👥 Number of Instructors per Region")
-        instructors_per_region = filtered_df.groupby('Region')['Instructor Name'].nunique().reset_index()
+        instructors_per_region = all_instructors.groupby('Region')['Instructor Name'].count().reset_index()
         instructors_per_region.columns = ['Region', 'Number of Instructors']
         instructors_per_region = instructors_per_region.sort_values('Number of Instructors', ascending=False)
         
-        # Create bar chart
         fig_inst_region = go.Figure()
         fig_inst_region.add_trace(go.Bar(
             x=instructors_per_region['Region'],
             y=instructors_per_region['Number of Instructors'],
-            marker_color='#3498db',
+            marker_color='#27ae60',
             text=instructors_per_region['Number of Instructors'],
-            textposition='outside',
-            textfont=dict(size=14)
+            textposition='outside'
         ))
         
         fig_inst_region.update_layout(
-            title='Number of Instructors by Region',
+            title='Count of Unique Instructors per Region',
             xaxis_title='Region',
-            yaxis_title='Number of Instructors',
+            yaxis_title='Unique Instructors',
             height=400,
             plot_bgcolor='#2b2b2b',
             paper_bgcolor='#1e1e1e',
             font=dict(color='white'),
-            yaxis=dict(gridcolor='#404040'),
-            xaxis=dict(gridcolor='#404040')
+            yaxis=dict(gridcolor='#404040', rangemode='tozero'),
+            xaxis=dict(type='category', gridcolor='#404040', tickangle=-45)
         )
-        
         st.plotly_chart(fig_inst_region, use_container_width=True)
-        
-        # Display table
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.dataframe(instructors_per_region, hide_index=True, use_container_width=True)
-        with col2:
-            # FIX: Use the explicit unique count
-            st.metric("Total Unique Instructors", total_unique_instructors)
-            st.metric("Average per Region", f"{instructors_per_region['Number of Instructors'].mean():.1f}")
 
-    # ===== TAB 3: GRADE ANALYSIS (UNCHANGED) =====
+
+    # ===== TAB 3: GRADE ANALYSIS (Unchanged) =====
     with tab3:
         st.header("Grade-wise Performance Analysis")
+        
+        # Performance Comparison Chart
+        st.subheader("📈 Performance Comparison (Pre vs Post)")
+
         grade_stats = filtered_df.groupby('Parent_Class').agg({
             'Pre_Score': 'mean',
             'Post_Score': 'mean',
-            'Student Id': 'count'
+            'Student Id': 'count' # Total assessments per grade
         }).reset_index()
-        
+
         grade_stats['Pre_Score_Pct'] = (grade_stats['Pre_Score'] / 5) * 100
         grade_stats['Post_Score_Pct'] = (grade_stats['Post_Score'] / 5) * 100
         grade_stats['Improvement'] = grade_stats['Post_Score_Pct'] - grade_stats['Pre_Score_Pct']
@@ -896,7 +1048,7 @@ if uploaded_file is not None:
         grade_stats = grade_stats.sort_values('Pre_Score_Pct', ascending=True)
 
         fig = go.Figure()
-        
+
         fig.add_trace(go.Scatter(
             x=grade_stats['Parent_Class'],
             y=grade_stats['Pre_Score_Pct'],
@@ -908,7 +1060,7 @@ if uploaded_file is not None:
             textposition='top center',
             textfont=dict(size=14, color='#1abc9c')
         ))
-        
+
         fig.add_trace(go.Scatter(
             x=grade_stats['Parent_Class'],
             y=grade_stats['Post_Score_Pct'],
@@ -920,7 +1072,7 @@ if uploaded_file is not None:
             textposition='top center',
             textfont=dict(size=14, color='#f1c40f')
         ))
-        
+
         fig.update_layout(
             title='Grade-wise Performance Comparison (Ascending by Pre Score)',
             xaxis_title='Grade',
@@ -942,7 +1094,7 @@ if uploaded_file is not None:
         
         # Ensure grade_stats is sorted by grade number for the bar chart
         grade_stats_participation = grade_stats.sort_values('Parent_Class')
-        
+
         fig_part = go.Figure()
         fig_part.add_trace(go.Bar(
             x=grade_stats_participation['Parent_Class'],
@@ -961,78 +1113,86 @@ if uploaded_file is not None:
             paper_bgcolor='#1e1e1e',
             font=dict(color='white'),
             yaxis=dict(gridcolor='#404040'),
-            xaxis=dict(type='category', gridcolor='#404040')
+            xaxis=dict(type='category', gridcolor='#404040') 
         )
+        
         st.plotly_chart(fig_part, use_container_width=True)
-        
-        # Detailed table
-        st.markdown("---")
-        st.subheader("📋 Detailed Grade Metrics")
-        display_grade_stats = grade_stats.copy()
-        display_grade_stats.columns = ['Grade', 'Avg Pre Score', 'Avg Post Score', 'Total Assessments', 'Pre %', 'Post %', 'Improvement %']
-        
-        # Format columns for display
-        display_grade_stats['Pre %'] = display_grade_stats['Pre %'].apply(lambda x: f"{x:.1f}%")
-        display_grade_stats['Post %'] = display_grade_stats['Post %'].apply(lambda x: f"{x:.1f}%")
-        display_grade_stats['Improvement %'] = display_grade_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
-        
-        # Select and reorder columns for user display
-        display_grade_stats = display_grade_stats[['Grade', 'Total Assessments', 'Pre %', 'Post %', 'Improvement %']]
-        st.dataframe(display_grade_stats, hide_index=True, use_container_width=True)
 
-    # ===== TAB 4: PROGRAM TYPE ANALYSIS (MODIFIED REGION ANALYSIS) =====
+        # Detailed Table
+        st.markdown("---")
+        st.subheader("📋 Grade-wise Detailed Metrics")
+
+        display_grade_stats = grade_stats.copy()
+        display_grade_stats['Avg Pre Score %'] = display_grade_stats['Pre_Score_Pct'].apply(lambda x: f"{x:.1f}%")
+        display_grade_stats['Avg Post Score %'] = display_grade_stats['Post_Score_Pct'].apply(lambda x: f"{x:.1f}%")
+        display_grade_stats['Improvement %'] = display_grade_stats['Improvement'].apply(lambda x: f"{x:.1f}%")
+
+        display_grade_stats = display_grade_stats[['Parent_Class', 'Student Id', 'Avg Pre Score %', 'Avg Post Score %', 'Improvement %']]
+        display_grade_stats.columns = ['Grade', 'Total Assessments', 'Avg Pre %', 'Avg Post %', 'Improvement %']
+
+        st.dataframe(display_grade_stats.sort_values('Grade'), hide_index=True, use_container_width=True)
+
+    # ===== TAB 4: PROGRAM TYPE ANALYSIS (Unchanged) =====
     with tab4:
-        st.header("Program Type Performance Analysis")
+        st.header("Program Type Analysis")
         
-        # 1. Overall Program Type Performance (Existing)
+        # 1. Overall Program Analysis
+        st.subheader("📈 Overall Program Performance Comparison (Pre vs Post)")
+
         program_stats = filtered_df.groupby('Program Type').agg({
             'Pre_Score': 'mean',
             'Post_Score': 'mean',
             'Student Id': 'count'
         }).reset_index()
-        
+
         program_stats['Pre_Score_Pct'] = (program_stats['Pre_Score'] / 5) * 100
         program_stats['Post_Score_Pct'] = (program_stats['Post_Score'] / 5) * 100
         program_stats['Improvement'] = program_stats['Post_Score_Pct'] - program_stats['Pre_Score_Pct']
         
-        # MODIFIED: Sort in ascending order of PRE Score Pct
+        # Sort in ascending order of PRE Score Pct
         program_stats = program_stats.sort_values('Pre_Score_Pct', ascending=True)
 
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
+        fig_prog = go.Figure()
+
+        fig_prog.add_trace(go.Scatter(
             x=program_stats['Program Type'],
             y=program_stats['Pre_Score_Pct'],
-            name='Pre-Session',
-            marker_color='#3498db',
+            mode='lines+markers+text',
+            name='Pre-Session Average',
+            line=dict(color='#9b59b6', width=3),
+            marker=dict(size=10),
             text=[f"{val:.0f}%" for val in program_stats['Pre_Score_Pct']],
-            textposition='outside'
+            textposition='top center',
+            textfont=dict(size=12, color='#9b59b6')
         ))
-        
-        fig.add_trace(go.Bar(
+
+        fig_prog.add_trace(go.Scatter(
             x=program_stats['Program Type'],
             y=program_stats['Post_Score_Pct'],
-            name='Post-Session',
-            marker_color='#e74c3c',
+            mode='lines+markers+text',
+            name='Post-Session Average',
+            line=dict(color='#34495e', width=3),
+            marker=dict(size=10),
             text=[f"{val:.0f}%" for val in program_stats['Post_Score_Pct']],
-            textposition='outside'
+            textposition='top center',
+            textfont=dict(size=12, color='#34495e')
         ))
-        
-        fig.update_layout(
-            title='Program Type Performance Comparison (All Regions, Ascending by Pre Score)',
+
+        fig_prog.update_layout(
+            title='Program Type Performance Comparison (Ascending by Pre Score)',
             xaxis_title='Program Type',
             yaxis_title='Average Score (%)',
-            barmode='group',
+            hovermode='x unified',
             height=500,
             plot_bgcolor='#2b2b2b',
             paper_bgcolor='#1e1e1e',
             font=dict(color='white'),
-            yaxis=dict(range=[0, 110], gridcolor='#404040'),
-            xaxis=dict(type='category', gridcolor='#404040') # Added category type safety
+            yaxis=dict(range=[0, 100], gridcolor='#404040'),
+            xaxis=dict(type='category', gridcolor='#404040')
         )
         
-        st.plotly_chart(fig, use_container_width=True)
-        
+        st.plotly_chart(fig_prog, use_container_width=True)
+
         # 2. Program Analysis by Region (Multi-Select Version)
         st.markdown("---")
         st.subheader("Program Analysis by Region (Multi-Select)")
@@ -1042,7 +1202,7 @@ if uploaded_file is not None:
             'Pre_Score': 'mean',
             'Post_Score': 'mean'
         }).reset_index()
-        
+
         # Calculate percentages
         program_region_stats['Pre_Score_Pct'] = (program_region_stats['Pre_Score'] / 5) * 100
         program_region_stats['Post_Score_Pct'] = (program_region_stats['Post_Score'] / 5) * 100
@@ -1051,11 +1211,8 @@ if uploaded_file is not None:
         unique_regions_in_data = sorted(filtered_df['Region'].unique())
         
         # Change selectbox to multiselect
-        selected_regions_for_prog = st.multiselect("Select Region(s) to compare Programs", 
-                                                   unique_regions_in_data, 
-                                                   default=unique_regions_in_data, 
-                                                   key='prog_region_viz_select_multi')
-        
+        selected_regions_for_prog = st.multiselect("Select Region(s) to compare Programs", unique_regions_in_data, default=unique_regions_in_data, key='prog_region_viz_select_multi')
+
         fig_prog_region = go.Figure()
         
         # Define a list of distinct colors for the lines
@@ -1066,7 +1223,7 @@ if uploaded_file is not None:
         for region in selected_regions_for_prog:
             region_data = program_region_stats[program_region_stats['Region'] == region]
             # Sort by Program Type for consistent X-axis order
-            region_data = region_data.sort_values('Program Type', ascending=True) 
+            region_data = region_data.sort_values('Program Type', ascending=True)
 
             # Get the base color
             base_color = color_scale[color_index % len(color_scale)]
@@ -1100,9 +1257,9 @@ if uploaded_file is not None:
             title_regions = ", ".join(selected_regions_for_prog) if len(selected_regions_for_prog) <= 3 else f"{len(selected_regions_for_prog)} Regions"
         else:
             title_regions = "No Regions Selected"
-            
+
         fig_prog_region.update_layout(
-            title=f'Program Performance Comparison for {title_regions}',
+            title=f'Program Performance Comparison across {title_regions}',
             xaxis_title='Program Type',
             yaxis_title='Average Score (%)',
             height=500,
@@ -1116,33 +1273,33 @@ if uploaded_file is not None:
         
         st.plotly_chart(fig_prog_region, use_container_width=True)
         
-        # 3. Detailed Program Metrics Table (Existing)
+        # Detailed Table
         st.markdown("---")
-        st.subheader("📋 Detailed Program Type Metrics")
-        display_prog = program_stats.copy()
-        display_prog.columns = ['Program Type', 'Avg Pre Score', 'Avg Post Score', 'Total Assessments', 'Pre %', 'Post %', 'Improvement %']
-        
-        # Select and reorder columns for user display
-        display_prog = display_prog[['Program Type', 'Total Assessments', 'Pre %', 'Post %', 'Improvement %']]
-        
-        # Format columns for display
-        display_prog['Pre %'] = display_prog['Pre %'].apply(lambda x: f"{x:.1f}%")
-        display_prog['Post %'] = display_prog['Post %'].apply(lambda x: f"{x:.1f}%")
-        display_prog['Improvement %'] = display_prog['Improvement %'].apply(lambda x: f"{x:.1f}%")
+        st.subheader("📋 Program-wise Detailed Metrics")
 
-        st.dataframe(display_prog, hide_index=True, use_container_width=True)
+        display_program_stats = program_stats.copy()
+        display_program_stats['Avg Pre Score %'] = display_program_stats['Pre_Score_Pct'].apply(lambda x: f"{x:.1f}%")
+        display_program_stats['Avg Post Score %'] = display_program_stats['Post_Score_Pct'].apply(lambda x: f"{x:.1f}%")
+        display_program_stats['Improvement %'] = display_program_stats['Improvement'].apply(lambda x: f"{x:.1f}%")
 
-    # ===== TAB 5: STUDENT PARTICIPATION (UNCHANGED) =====
+        display_program_stats = display_program_stats[['Program Type', 'Student Id', 'Avg Pre Score %', 'Avg Post Score %', 'Improvement %']]
+        display_program_stats.columns = ['Program Type', 'Total Assessments', 'Avg Pre %', 'Avg Post %', 'Improvement %']
+
+        st.dataframe(display_program_stats, hide_index=True, use_container_width=True)
+
+
+    # ===== TAB 5: STUDENT PARTICIPATION (Unchanged) =====
     with tab5:
         st.header("Student Participation Analysis")
-        st.markdown("### Number of Unique Students Taking Assessments")
         
         # Students per Grade
-        st.subheader("📚 Students per Grade/Parent Class")
+        st.subheader("📚 Students per Grade")
+        
+        # Filtered data for unique students, then group by Parent_Class
         students_per_grade = filtered_df.groupby('Parent_Class')['Student Id'].nunique().reset_index()
         students_per_grade.columns = ['Grade', 'Number of Students']
         students_per_grade = students_per_grade.sort_values('Grade')
-        
+
         fig_grade = go.Figure()
         fig_grade.add_trace(go.Bar(
             x=students_per_grade['Grade'],
@@ -1161,11 +1318,11 @@ if uploaded_file is not None:
             plot_bgcolor='#2b2b2b',
             paper_bgcolor='#1e1e1e',
             font=dict(color='white'),
-            yaxis=dict(gridcolor='#404040'),
+            yaxis=dict(gridcolor='#404040', rangemode='tozero'),
             xaxis=dict(gridcolor='#404040')
         )
         st.plotly_chart(fig_grade, use_container_width=True)
-        
+
         col1, col2 = st.columns(2)
         with col1:
             st.dataframe(students_per_grade, hide_index=True, use_container_width=True)
@@ -1198,11 +1355,11 @@ if uploaded_file is not None:
             plot_bgcolor='#2b2b2b',
             paper_bgcolor='#1e1e1e',
             font=dict(color='white'),
-            yaxis=dict(gridcolor='#404040'),
+            yaxis=dict(gridcolor='#404040', rangemode='tozero'),
             xaxis=dict(gridcolor='#404040', tickangle=-45)
         )
         st.plotly_chart(fig_region, use_container_width=True)
-        
+
         # Students per Program Type
         st.markdown("---")
         st.subheader("📊 Students per Program Type")
@@ -1228,50 +1385,51 @@ if uploaded_file is not None:
             plot_bgcolor='#2b2b2b',
             paper_bgcolor='#1e1e1e',
             font=dict(color='white'),
-            yaxis=dict(gridcolor='#404040'),
+            yaxis=dict(gridcolor='#404040', rangemode='tozero'),
             xaxis=dict(gridcolor='#404040')
         )
         st.plotly_chart(fig_program, use_container_width=True)
 
-        # Cross-Tabulation: Grade vs Region
-        st.markdown("---")
-        st.subheader("Cross-Tabulation: Students by Grade and Region")
-        students_grade_region = filtered_df.groupby(['Parent_Class', 'Region'])['Student Id'].nunique().reset_index()
-        students_grade_region.columns = ['Grade', 'Region', 'Number of Students']
-        
-        # Pivot table
-        pivot_grade_region = students_grade_region.pivot(index='Grade', columns='Region', values='Number of Students').fillna(0).astype(int)
-        st.dataframe(pivot_grade_region, use_container_width=True)
 
-        # Download all participation data
-        st.markdown("---")
-        st.subheader("📥 Download Participation Reports")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            grade_csv = students_per_grade.to_csv(index=False)
-            st.download_button("Download Grade Data", grade_csv, "students_per_grade.csv", "text/csv")
-        with col2:
-            region_csv = students_per_region.to_csv(index=False)
-            st.download_button("Download Region Data", region_csv, "students_per_region.csv", "text/csv")
-        with col3:
-            program_csv = students_per_program.to_csv(index=False)
-            st.download_button("Download Program Data", program_csv, "students_per_program.csv", "text/csv")
-
-    # ===== TAB 6: SCHOOL ANALYSIS (UNCHANGED) =====
+    # ===== TAB 6: SCHOOL ANALYSIS (Unchanged) =====
     with tab6:
-        st.header("School Analysis")
-        st.markdown("### School Performance and Engagement Metrics")
+        st.header("School-wise Analysis")
+        
         try:
-            # Group by School Name and UDISE to get unique schools
-            # Calculate metrics per school
-            school_stats = filtered_df.groupby(['School Name', 'UDISE']).agg({
-                'Student Id': 'nunique', # Number of students
-                'Content Id': 'nunique', # Number of unique assessments
-                'Instructor Login Id': 'nunique', # Number of instructors
-                'Region': 'first' # Region (assuming 1 region per school)
-            }).reset_index()
-            school_stats.columns = ['School Name', 'UDISE', 'Total Students', 'Unique Assessments', 'Total Instructors', 'Region']
-            
+            # Prepare school stats
+            # Define a unique assessment session key (Content Id + Class + School Name + Date_Post)
+            if 'Assessment_Session_Key' not in filtered_df.columns:
+                filtered_df['Assessment_Session_Key'] = (
+                    filtered_df['Content Id'].astype(str) + '_' + 
+                    filtered_df['Class'].astype(str) + '_' + 
+                    filtered_df['School Name'].fillna('NA').astype(str) + '_' + 
+                    filtered_df['Date_Post'].astype(str)
+                )
+
+            # Group by School Name and calculate metrics
+            school_stats = filtered_df.groupby(['School Name', 'UDISE']).agg(
+                Total_Students=('Student Id', 'nunique'),
+                Total_Assessments=('Student Id', 'count'),
+                Unique_Assessments=('Assessment_Session_Key', 'nunique'),
+                Total_Instructors=('Instructor Name', 'nunique'),
+                Avg_Pre_Score=('Pre_Score', 'mean'),
+                Avg_Post_Score=('Post_Score', 'mean'),
+                Region=('Region', lambda x: x.mode()[0] if not x.mode().empty else 'NA') # Most common region
+            ).reset_index()
+
+            school_stats['Avg Pre %'] = (school_stats['Avg_Pre_Score'] / 5) * 100
+            school_stats['Avg Post %'] = (school_stats['Avg_Post_Score'] / 5) * 100
+            school_stats['Improvement'] = school_stats['Avg Post %'] - school_stats['Avg Pre %']
+
+            # Round percentages for display
+            school_stats['Avg Pre %'] = school_stats['Avg Pre %'].round(1).astype(str) + '%'
+            school_stats['Avg Post %'] = school_stats['Avg Post %'].round(1).astype(str) + '%'
+            school_stats['Improvement'] = school_stats['Improvement'].round(1).astype(str) + '%'
+
+            # Reorder and rename columns for display
+            school_stats = school_stats[['School Name', 'UDISE', 'Total_Students', 'Total_Assessments', 'Unique_Assessments', 'Total_Instructors', 'Avg Pre %', 'Avg Post %', 'Improvement', 'Region']]
+            school_stats.columns = ['School Name', 'UDISE', 'Total Students', 'Total Assessments', 'Unique Assessments', 'Total Instructors', 'Avg Pre %', 'Avg Post %', 'Improvement %', 'Region']
+
             # Key Metrics
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -1285,15 +1443,15 @@ if uploaded_file is not None:
             with col4:
                 avg_instructors = school_stats['Total Instructors'].mean()
                 st.metric("Avg Instructors/School", f"{avg_instructors:.1f}")
-
-            st.markdown("---")
             
+            st.markdown("---")
+
             # School List Table
             st.subheader("🏫 Detailed School List")
-            
+
             # Search filter for schools
             search_school = st.text_input("🔍 Search School (Name or UDISE)", "")
-            
+
             # Filter the school stats based on search query
             if search_school:
                 search_term = search_school.upper().strip()
@@ -1305,7 +1463,7 @@ if uploaded_file is not None:
                 display_school_stats = school_stats
 
             st.dataframe(display_school_stats, hide_index=True, use_container_width=True)
-            
+
             # Download Button
             school_csv = school_stats.to_csv(index=False)
             st.download_button(
@@ -1314,83 +1472,81 @@ if uploaded_file is not None:
                 "school_data.csv",
                 "text/csv"
             )
-            
+
         except Exception as e:
             st.error(f"Error generating school analysis: {str(e)}")
+
 
     # ===== TAB 7: DONOR ANALYSIS (UNCHANGED EXCEPT FOR DATA CLEANING) =====
     with tab7:
         st.header("Donor Performance Analysis")
-        
+
         # 1. ADD DONOR FILTER
         # Since df['Donor'] is now uppercase, the list will only contain unique, standardized names.
         all_donors = ['All Donors'] + sorted(filtered_df['Donor'].unique().tolist())
         selected_donor = st.selectbox("Select Donor for Individual Analysis", all_donors)
-        
+
+        # 1. Overall Donor Summary Table (Responds to Global Filters)
+        donor_stats = filtered_df.groupby('Donor').agg(
+            Num_Schools=('UDISE', 'nunique'),
+            Num_Students=('Student Id', 'nunique'),
+            Num_Assessments=('Student Id', 'count'),
+            Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
+            Avg_Post_Score_Raw=('Post_Score', 'mean')
+        ).reset_index()
+
+        # 2. Calculate percentages and improvement
+        donor_stats['Avg Pre Score %'] = (donor_stats['Avg_Pre_Score_Raw'] / 5) * 100
+        donor_stats['Avg Post Score %'] = (donor_stats['Avg_Post_Score_Raw'] / 5) * 100
+        donor_stats['Improvement %'] = donor_stats['Avg Post Score %'] - donor_stats['Avg Pre Score %']
+
+        # 3. Format columns for display - CREATE A COPY FOR DISPLAY
+        display_donor_stats = donor_stats.copy()
+
+        # Note: Keeping the donor table sorted descending by Assessments (or by Donor name if needed)
+        display_donor_stats = display_donor_stats.sort_values('Num_Assessments', ascending=False)
+
+        # Apply formatting
+        display_donor_stats['Avg Pre Score %'] = display_donor_stats['Avg Pre Score %'].apply(lambda x: f"{x:.1f}%")
+        display_donor_stats['Avg Post Score %'] = display_donor_stats['Avg Post Score %'].apply(lambda x: f"{x:.1f}%")
+        display_donor_stats['Improvement %'] = display_donor_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
+
+        # Rename columns for display
+        display_donor_stats.columns = [
+            'Donor', 
+            'Total Schools', 
+            'Total Students', 
+            'Total Assessments', 
+            'Avg Pre Score (Raw)', 
+            'Avg Post Score (Raw)', 
+            'Avg Pre %', 
+            'Avg Post %', 
+            'Improvement %'
+        ]
+
+        st.subheader("📋 Donor-wise Summary (Responds to Global Filters)") 
+        # Show Raw Scores and Percentages
+        st.dataframe(display_donor_stats, hide_index=True, use_container_width=True)
+        st.markdown("---")
+
+
         # Determine the DataFrame to use for the detailed analysis section.
         if selected_donor != 'All Donors':
             # *** SIMPLIFIED FIX: Uses exact match against the master 'df' as the data is now standardized to uppercase in clean_and_process_data ***
-            donor_filtered_df = df[ 
+            donor_filtered_df = df[
                 (df['Donor'] == selected_donor) & 
                 (df['Region'].isin(selected_regions)) &
                 (df['Program Type'].isin(selected_programs)) &
                 (df['Parent_Class'].isin(selected_classes))
             ].copy()
-            st.subheader(f"Metrics for Donor: **{selected_donor}**")
+            st.subheader(f"Metrics for Selected Donor: **{selected_donor}**")
         else:
-            # If 'All Donors' is selected, respect the global sidebar filters (filtered_df)
             donor_filtered_df = filtered_df.copy()
-            st.subheader("Metrics for All Donors (Summary View)")
-
+            st.subheader("Metrics for **All Donors** (Filtered Data)")
+        
         if donor_filtered_df.empty:
-            st.info(f"No data available for the selected donor/filters.")
-            # Use continue/return or simply let the rest of the tab not execute data logic
-            pass
+            st.warning("No data found for the selected donor and active filters.")
         else:
-            # --- LOGIC FOR ALL DONORS (Summary Table) ---
-            # NOTE: This table *must* respect the sidebar filters, so it uses filtered_df
-            # 1. Calculate Donor Statistics (Grouping by Donor)
-            donor_stats = filtered_df.groupby('Donor').agg(
-                Num_Schools=('UDISE', 'nunique'),
-                Num_Students=('Student Id', 'nunique'),
-                Num_Assessments=('Student Id', 'count'), # Total rows = total assessments
-                Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
-                Avg_Post_Score_Raw=('Post_Score', 'mean')
-            ).reset_index()
-            
-            # 2. Calculate percentages (These are FLOAT columns)
-            donor_stats['Avg Pre Score %'] = (donor_stats['Avg_Pre_Score_Raw'] / 5) * 100
-            donor_stats['Avg Post Score %'] = (donor_stats['Avg_Post_Score_Raw'] / 5) * 100
-            donor_stats['Improvement %'] = donor_stats['Avg Post Score %'] - donor_stats['Avg Pre Score %']
-            
-            # 3. Format columns for display - CREATE A COPY FOR DISPLAY
-            display_donor_stats = donor_stats.copy()
-            # Note: Keeping the donor table sorted descending by Assessments (or by Donor name if needed)
-            display_donor_stats = display_donor_stats.sort_values('Num_Assessments', ascending=False)
-            
-            # Apply formatting
-            display_donor_stats['Avg Pre Score %'] = display_donor_stats['Avg Pre Score %'].apply(lambda x: f"{x:.1f}%")
-            display_donor_stats['Avg Post Score %'] = display_donor_stats['Avg Post Score %'].apply(lambda x: f"{x:.1f}%")
-            display_donor_stats['Improvement %'] = display_donor_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
-            
-            # Rename columns for display
-            display_donor_stats.columns = [
-                'Donor', 
-                'Total Schools', 
-                'Total Students', 
-                'Total Assessments', 
-                'Avg Pre Score (Raw)', 
-                'Avg Post Score (Raw)', 
-                'Avg Pre %', 
-                'Avg Post %', 
-                'Improvement %'
-            ]
-            
-            st.subheader("📋 Donor-wise Summary (Responds to Global Filters)")
-            # Show Raw Scores and Percentages
-            st.dataframe(display_donor_stats, hide_index=True, use_container_width=True)
-            st.markdown("---")
-
             # --- LOGIC FOR INDIVIDUAL DONOR (Specific Metrics) ---
             # Calculate Metrics for the Selected Donor/All (uses the now correctly filtered donor_filtered_df)
             donor_specific_stats = {
@@ -1411,33 +1567,37 @@ if uploaded_file is not None:
             with col3:
                 st.metric("Improvement", f"{donor_specific_stats['Improvement %']:.1f}%", delta=f"{donor_specific_stats['Improvement %']:.1f}%")
             with col4:
-                st.metric("Total Schools", donor_specific_stats['Total Schools'])
-            with col5:
                 st.metric("Total Students", donor_specific_stats['Total Students'])
-            
-            st.markdown("---")
+            with col5:
+                st.metric("Total Assessments", donor_specific_stats['Total Assessments'])
 
-            # Breakdown by Region for the Selected Donor
-            # NOTE: This calculation uses the donor_filtered_df which is now guaranteed
-            # to respect all current filters (global + selected donor)
-            st.subheader(f"Region Breakdown for {selected_donor}")
+
+            # --- Donor Regional Breakdown ---
+            st.markdown("---")
+            st.subheader(f"Region-wise Breakdown for {selected_donor}")
+
+            # Group by Region for the selected donor's data
             donor_region_stats = donor_filtered_df.groupby('Region').agg(
                 Num_Schools=('UDISE', 'nunique'),
                 Num_Students=('Student Id', 'nunique'),
-                Avg_Pre_Score_Raw=('Pre_Score', 'mean'),
-                Avg_Post_Score_Raw=('Post_Score', 'mean')
+                Avg_Pre_Score=('Pre_Score', 'mean'),
+                Avg_Post_Score=('Post_Score', 'mean')
             ).reset_index()
-            donor_region_stats['Avg Pre %'] = (donor_region_stats['Avg_Pre_Score_Raw'] / 5) * 100
-            donor_region_stats['Avg Post %'] = (donor_region_stats['Avg_Post_Score_Raw'] / 5) * 100
-            donor_region_stats['Improvement %'] = donor_region_stats['Avg Post %'] - donor_region_stats['Avg Pre %']
-            
-            # Format and display
-            donor_region_stats['Avg Pre %'] = donor_region_stats['Avg Pre %'].apply(lambda x: f"{x:.1f}%")
-            donor_region_stats['Avg Post %'] = donor_region_stats['Avg Post %'].apply(lambda x: f"{x:.1f}%")
-            donor_region_stats['Improvement %'] = donor_region_stats['Improvement %'].apply(lambda x: f"{x:.1f}%")
 
-            # Select and rename columns for display
-            display_donor_region = donor_region_stats[['Region', 'Num_Schools', 'Num_Students', 'Avg Pre %', 'Avg Post %', 'Improvement %']].copy()
+            donor_region_stats['Avg Pre Score %'] = (donor_region_stats['Avg_Pre_Score'] / 5) * 100
+            donor_region_stats['Avg Post Score %'] = (donor_region_stats['Avg_Post_Score'] / 5) * 100
+            donor_region_stats['Improvement %'] = donor_region_stats['Avg Post Score %'] - donor_region_stats['Avg Pre Score %']
+
+            # Sort by Avg Post Score %
+            donor_region_stats = donor_region_stats.sort_values('Avg Post Score %', ascending=False)
+            
+            # Create a display table (with formatting)
+            display_donor_region = donor_region_stats.copy()
+            display_donor_region['Avg Pre Score %'] = display_donor_region['Avg Pre Score %'].apply(lambda x: f"{x:.1f}%")
+            display_donor_region['Avg Post Score %'] = display_donor_region['Avg Post Score %'].apply(lambda x: f"{x:.1f}%")
+            display_donor_region['Improvement %'] = display_donor_region['Improvement %'].apply(lambda x: f"{x:.1f}%")
+
+            display_donor_region = display_donor_region[['Region', 'Num_Schools', 'Num_Students', 'Avg Pre Score %', 'Avg Post Score %', 'Improvement %']].copy()
             display_donor_region.columns = ['Region', 'Schools', 'Students', 'Avg Pre %', 'Avg Post %', 'Improvement %']
             st.dataframe(display_donor_region, hide_index=True, use_container_width=True)
 
@@ -1450,7 +1610,8 @@ if uploaded_file is not None:
                 f"{selected_donor}_region_analysis.csv",
                 "text/csv"
             )
-            
+
+
     # ===== TAB 8: SUBJECT ANALYSIS (UNCHANGED) =====
     with tab8:
         if not filtered_df.empty:
@@ -1458,14 +1619,18 @@ if uploaded_file is not None:
             subject_stats = tab8_subject_analysis(filtered_df)
         else:
             st.info("No data to display after applying filters.")
+            
+    # ===== TAB 9: MONTH ANALYSIS (NEW CALL) =====
+    with tab9:
+        tab9_month_analysis(filtered_df)
+
 
     # ===== DOWNLOAD SECTION (UNCHANGED) =====
     st.markdown("---")
     st.subheader("📥 Download Analysis Reports")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
-    
+
     # Ensure all required dataframes exist before attempting to download
-    
     # Region Analysis
     with col1:
         if 'region_stats' in locals():
@@ -1476,89 +1641,87 @@ if uploaded_file is not None:
 
     # Instructor Analysis
     with col2:
-        if 'instructor_stats' in locals():
-            # Re-sort instructor stats for a consistent download table (descending by Post Score is conventional for ranking)
-            instructor_stats_for_download = instructor_stats.sort_values('Post_Score_Pct', ascending=False)
-            instructor_csv = instructor_stats_for_download.to_csv(index=False)
-            st.download_button("Download Instructor Analysis", instructor_csv, "instructor_analysis.csv", "text/csv")
+        if 'all_instructors' in locals():
+            st.download_button("Download Instructor Analysis", all_instructors.to_csv(index=False), "instructor_analysis.csv", "text/csv")
         else:
             st.caption("Instructor data not available.")
 
     # Grade Analysis
     with col3:
         if 'grade_stats' in locals():
-            # Re-sort grade stats for a consistent download table (by Grade number is conventional)
-            grade_stats_for_download = grade_stats.sort_values('Parent_Class')
-            grade_csv = grade_stats_for_download.to_csv(index=False)
-            st.download_button("Download Grade Analysis", grade_csv, "grade_analysis.csv", "text/csv")
+            st.download_button("Download Grade Analysis", grade_stats.to_csv(index=False), "grade_analysis.csv", "text/csv")
         else:
             st.caption("Grade data not available.")
 
-    # Program Type Analysis
+    # Program Analysis
     with col4:
         if 'program_stats' in locals():
-            # Re-sort program stats for a consistent download table (by Program Type is conventional)
-            program_stats_for_download = program_stats.sort_values('Program Type')
-            program_csv = program_stats_for_download.to_csv(index=False)
-            st.download_button("Download Program Analysis", program_csv, "program_analysis.csv", "text/csv")
+            st.download_button("Download Program Analysis", program_stats.to_csv(index=False), "program_analysis.csv", "text/csv")
         else:
             st.caption("Program data not available.")
-            
-    # Donor Summary
+
+    # Donor Analysis (Overall Summary)
     with col5:
         if 'donor_stats' in locals():
-            donor_summary_csv = donor_stats.to_csv(index=False)
-            st.download_button("Download Donor Summary", donor_summary_csv, "donor_summary.csv", "text/csv")
+            st.download_button("Download Donor Analysis", donor_stats.to_csv(index=False), "donor_analysis.csv", "text/csv")
         else:
             st.caption("Donor data not available.")
 
-    # Subject Analysis (Handled by the function return)
+    # Subject Analysis
     with col6:
         if subject_stats is not None:
-            # Already handled within the tab8 function, just need to confirm it ran
-            st.caption("See Tab 8 for Subject Download.")
+            # Use the raw data from subject_stats if available
+            subject_csv_for_download = subject_stats[[
+                'Subject', 
+                'Num_Students', 
+                'Num_Assessments', 
+                'Avg Pre Score %', 
+                'Avg Post Score %', 
+                'Improvement %'
+            ]].copy()
+            subject_csv_for_download.columns = [
+                'Subject', 
+                'Unique Students', 
+                'Total Assessments', 
+                'Avg Pre %', 
+                'Avg Post %', 
+                'Improvement %'
+            ]
+            st.download_button(
+                "Download Subject Analysis",
+                subject_csv_for_download.to_csv(index=False),
+                "subject_analysis.csv",
+                "text/csv"
+            )
         else:
             st.caption("Subject data not available.")
 
-
 else:
-    st.info("👆 Please upload your student data Excel file to begin")
-    
+    # Instructions if no file is uploaded
     st.markdown("---")
-    st.subheader("📋 Required Excel Columns")
+    st.info("⬆️ Please upload your student assessment data file (.xlsx or .xls) to begin the analysis.")
     st.markdown("""
-    Your Excel file must contain these columns:
-    
-    **Identification Columns:**
-    - `Region` - Geographic region
-    - `School Name` - Name of the school
-    - `Donor` - The donor/partner associated with the record
-    - **`Subject` - The subject name**
-    - `UDISE` - School unique ID
-    - `Student Id` - Unique student identifier
-    - `Class` - Class with section (e.g., 6-A, 7-B)
-    - `Instructor Name` - Name of instructor
-    - `Instructor Login Id` - Login ID of instructor
-    - `Program Type` - Program type code
-    - `Content Id` - Assessment/Content Identifier
-    - `Date_Post` - Assessment Date (Required for tracking unique tests)
-    
-    **Pre-Session (Questions & Answers):**
-    - `Q1`, `Q2`, `Q3`, `Q4`, `Q5` - Student responses
-    - `Q1 Answer`, `Q2 Answer`, `Q3 Answer`, `Q4 Answer`, `Q5 Answer` - Correct answers
-    
-    **Post-Session (Questions & Answers):**
-    - `Q1_Post`, `Q2_Post`, `Q3_Post`, `Q4_Post`, `Q5_Post` - Student responses
-    - `Q1_Answer_Post`, `Q2_Answer_Post`, `Q3_Answer_Post`, `Q4_Answer_Post`, `Q5_Answer_Post` - Correct answers
-    
+    **Required Columns in your Data:**
+    * `Date_Post` - Assessment Date (Required for tracking unique tests)
+    * `Donor` - The donor/partner associated with the record
+    * `Subject` - The subject name
+    * `Region` - Geographic region
+    * `School Name` - Name of the school
+    * `UDISE` - School unique ID
+    * `Student Id` - Unique student identifier
+    * `Class` - Class with section (e.g., 6-A, 7-B)
+    * `Program Type` - Program type code
+    * `Content Id` - Assessment/Content Identifier
+    * `Q1`, `Q2`, `Q3`, `Q4`, `Q5` - Student responses (Pre-session)
+    * `Q1 Answer`, `Q2 Answer`, `Q3 Answer`, `Q4 Answer`, `Q5 Answer` - Correct answers (Pre-session)
+    * `Q1_Post`, `Q2_Post`, `Q3_Post`, `Q4_Post`, `Q5_Post` - Student responses (Post-session)
+    * `Q1_Answer_Post`, `Q2_Answer_Post`, `Q3_Answer_Post`, `Q4_Answer_Post`, `Q5_Answer_Post` - Correct answers (Post-session)
     ---
-    
     **What happens when you upload:**
     1. ✅ Data is cleaned (incomplete records removed)
-    2. ✅ Scores are calculated automatically
-    3. ✅ Program types are standardized
-    4. ✅ **Donor names are standardized to UPPERCASE (Fix for 'Adobe' vs 'ADOBE')**
-    5. ✅ **Subject names are standardized (e.g., 'Science' and 'SCIENCE' become 'SCIENCE')**
-    6. ✅ Interactive dashboard is generated
-    7. ✅ Download options for all analyses
+    2. ✅ Pre and Post scores are calculated (out of 5)
+    3. ✅ Program Types and Donor names are standardized
+    4. ✅ Grade (Parent Class) is extracted
+    5. ✅ Filters are applied and key metrics are displayed
+    6. ✅ Detailed analyses are available in separate tabs (Region, Instructor, Grade, Program, Student, School, Donor, Subject, **Month**)
     """)
