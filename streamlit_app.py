@@ -1503,3 +1503,45 @@ if uploaded_file is not None:
             st.caption("See Tab 8 for Subject Download.")
         else:
             st.caption("Subject data not available.")
+
+
+else:
+    st.info("👆 Please upload your student data Excel file to begin")
+    
+    st.markdown("---")
+    st.subheader("📋 Required Excel Columns")
+    st.markdown("""
+    Your Excel file must contain these columns:
+    
+    **Identification Columns:**
+    - `Region` - Geographic region
+    - `School Name` - Name of the school
+    - `Donor` - The donor/partner associated with the record
+    - **`Subject` - The subject name**
+    - `UDISE` - School unique ID
+    - `Student Id` - Unique student identifier
+    - `Class` - Class with section (e.g., 6-A, 7-B)
+    - `Instructor Name` - Name of instructor
+    - `Instructor Login Id` - Login ID of instructor
+    - `Program Type` - Program type code
+    - `Content Id` - Assessment/Content Identifier
+    - `Date_Post` - Assessment Date (Required for tracking unique tests)
+    
+    **Pre-Session (Questions & Answers):**
+    - `Q1`, `Q2`, `Q3`, `Q4`, `Q5` - Student responses
+    - `Q1 Answer`, `Q2 Answer`, `Q3 Answer`, `Q4 Answer`, `Q5 Answer` - Correct answers
+    
+    **Post-Session (Questions & Answers):**
+    - `Q1_Post`, `Q2_Post`, `Q3_Post`, `Q4_Post`, `Q5_Post` - Student responses
+    - `Q1_Answer_Post`, `Q2_Answer_Post`, `Q3_Answer_Post`, `Q4_Answer_Post`, `Q5_Answer_Post` - Correct answers
+    
+    ---
+    
+    **What happens when you upload:**
+    1. ✅ Data is cleaned (incomplete records removed)
+    2. ✅ Scores are calculated automatically
+    3. ✅ Program types are standardized
+    4. ✅ **Donor names are standardized to UPPERCASE (Fix for 'Adobe' vs 'ADOBE')**
+    5. ✅ Interactive dashboard is generated
+    6. ✅ Download options for all analyses
+    """)
